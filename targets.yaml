@@ -1,0 +1,14 @@
+# Targets for rdt. Probe serials from robot_diag_ui_chat_plan.md section 2.
+# "robot S02" / "remote S02" are still open (plan section 9, question 1).
+targets:
+  robot:
+    mcu: STM32H755 (CM7)
+    probe_serial: "0030004A3235510837333439"
+    elf: ../robot_att/CM7/Debug/robot_att_H7_CM7.elf
+    log_port: null          # USART3 is shared with the E22 receive path: never open it
+  remote:
+    mcu: STM32F446
+    probe_serial: "0670FF514988525067182431"
+    elf: ../robot_rc_rtos/ATT_Debug/robot_rc_rtos.elf
+    log_port: auto          # USART2 VCP, 115200
+    log_baud: 115200
