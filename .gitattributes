@@ -1,0 +1,5 @@
+# The repository stores LF whatever core.autocrlf says on a machine.
+* text=auto
+*.bat text eol=crlf
+*.ps1 text eol=lf
+*.sh  text eol=lf
