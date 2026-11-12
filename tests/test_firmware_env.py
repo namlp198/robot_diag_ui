@@ -92,19 +92,20 @@ def test_claude_status_and_login_use_the_bundled_cli(tmp_path, monkeypatch):
     assert envcheck.start_claude_login()["started"] is False and envcheck.claude_status()["sdk"] is False
 
 
-def test_file_dialog_runs_a_separate_process_and_parses_its_answer():
+def test_file_dialog_uses_powershell_with_kind_in_the_environment():
     seen = []
 
     def runner(args, **k):
-        seen.append(args)
-        return subprocess.CompletedProcess(args, 0, 'noise\n{"path": "C:/x/app.hex"}\n', "")
+        seen.append((args, k["env"]))
+        return subprocess.CompletedProcess(args, 0, 'noise\n{"path":"C:\\\\x\\\\app.hex"}\n', "")
 
-    assert envcheck.pick_file("firmware", None, runner) == {"path": "C:/x/app.hex"}
-    assert seen[0][1:3] == ["-I", "-c"] and seen[0][4:6] == ["firmware", ""]
+    assert envcheck.pick_file("firmware", None, runner) == {"path": "C:\\x\\app.hex"}
+    args, env = seen[0]
+    assert args[0] == "powershell" and "-STA" in args and env["RDT_DLG_KIND"] == "firmware"
+    assert "firmware" not in args[-1].split("$filters")[0]            # the kind is data, not part of the script text
     assert envcheck.pick_file("rm -rf", None, runner)["path"] is None and len(seen) == 1   # unknown kind: no process
-    bad = lambda a, **k: subprocess.CompletedProcess(a, 1, "", "Traceback")  # noqa: E731
+    bad = lambda a, **k: subprocess.CompletedProcess(a, 1, "", "boom")  # noqa: E731
     assert envcheck.pick_file("elf", None, bad)["path"] is None
-
 
 def test_pinned_cube_version_matches_toolchain_file():
     from pathlib import Path

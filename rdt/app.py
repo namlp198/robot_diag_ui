@@ -33,7 +33,7 @@ def run(port: int = 8765) -> int:
     base = f"http://127.0.0.1:{port}"
     server = thread = None
     if not alive(base):
-        server = uvicorn.Server(uvicorn.Config(create_app(), host="127.0.0.1", port=port, log_level="warning"))
+        server = uvicorn.Server(uvicorn.Config(create_app(), host="127.0.0.1", port=port, log_level="warning", log_config=None))
         thread = threading.Thread(target=server.run, name="rdt-daemon", daemon=True)
         thread.start()
         for _ in range(100):

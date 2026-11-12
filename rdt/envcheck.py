@@ -169,27 +169,41 @@ def start_claude_login(popen=subprocess.Popen) -> dict:
 
 
 # --- native file dialog ------------------------------------------------------------------------------------------------------
+# A Windows "Open file" dialog from PowerShell (WinForms), so it works from source and from the installed exe alike (sys.executable
+# is the app itself there). Kind and start folder go in through environment variables, never into the script text.
 _DIALOG = r"""
-import json, sys, tkinter
-from tkinter import filedialog
-kind, initial = sys.argv[1], sys.argv[2] or None
-types = {"elf": [("ELF files", "*.elf *.axf *.out"), ("All files", "*.*")],
-         "firmware": [("Firmware", "*.elf *.hex *.bin"), ("ELF", "*.elf"), ("Intel HEX", "*.hex"), ("Binary", "*.bin"), ("All files", "*.*")],
-         "exe": [("STM32_Programmer_CLI.exe", "STM32_Programmer_CLI.exe"), ("Programs", "*.exe")]}[kind]
-root = tkinter.Tk(); root.withdraw(); root.attributes("-topmost", True)
-p = filedialog.askopenfilename(title="Select a file", filetypes=types, initialdir=initial, parent=root)
-root.destroy()
-print(json.dumps({"path": p or None}))
+Add-Type -AssemblyName System.Windows.Forms
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$filters = @{
+  elf      = 'ELF files (*.elf;*.axf;*.out)|*.elf;*.axf;*.out|All files (*.*)|*.*'
+  firmware = 'Firmware (*.elf;*.hex;*.bin)|*.elf;*.hex;*.bin|ELF (*.elf)|*.elf|Intel HEX (*.hex)|*.hex|Binary (*.bin)|*.bin|All files (*.*)|*.*'
+  exe      = 'STM32_Programmer_CLI.exe|STM32_Programmer_CLI.exe|Programs (*.exe)|*.exe'
+}
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true; $owner.ShowInTaskbar = $false; $owner.StartPosition = 'CenterScreen'; $owner.Opacity = 0
+$owner.Size = New-Object System.Drawing.Size(1, 1)
+$owner.Show()
+$d = New-Object System.Windows.Forms.OpenFileDialog
+$d.Title = 'Select a file'
+$d.Filter = $filters[$env:RDT_DLG_KIND]
+if ($env:RDT_DLG_INITIAL -and (Test-Path -LiteralPath $env:RDT_DLG_INITIAL)) { $d.InitialDirectory = $env:RDT_DLG_INITIAL }
+$path = $null
+if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $path = $d.FileName }
+$owner.Close()
+@{ path = $path } | ConvertTo-Json -Compress
 """
 
 
 def pick_file(kind: str, initial: str | None = None, runner=subprocess.run) -> dict:
     if kind not in ("elf", "firmware", "exe"):
         return {"path": None, "error": "bad kind"}
-    start = initial if initial and Path(initial).exists() else ""
-    r = runner([sys.executable, "-I", "-c", _DIALOG, kind, str(Path(start).parent if start and Path(start).is_file() else start)],
-               capture_output=True, text=True, timeout=600)
+    start = ""
+    if initial and Path(initial).exists():
+        start = str(Path(initial).parent if Path(initial).is_file() else initial)
+    env = {**os.environ, "RDT_DLG_KIND": kind, "RDT_DLG_INITIAL": start}
     try:
+        r = runner(["powershell", "-STA", "-NoProfile", "-NonInteractive", "-Command", _DIALOG], capture_output=True, text=True,
+                   timeout=600, env=env, creationflags=CREATE_NO_WINDOW if os.name == "nt" else 0)
         return json.loads(r.stdout.strip().splitlines()[-1])
-    except (ValueError, IndexError):
-        return {"path": None, "error": (r.stderr or "dialog failed")[-200:]}
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired) as e:
+        return {"path": None, "error": f"dialog failed: {str(e)[:120]}"}

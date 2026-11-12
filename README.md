@@ -61,6 +61,23 @@ Optional env: `RDT_CHAT_MODEL`, `RDT_CHAT_MAX_USD` (chat cost cap, default 2.0).
 `targets.yaml` paths to ELF files are relative to this repo and point at the sibling repos
 (`../robot_s_rtos`, `../robot_rc_rtos`).
 
+## Installable app (.exe)
+
+```powershell
+.venv\Scripts\python -m pip install -e .[daemon,probe,chat,app] pyinstaller==6.22.3   # once
+.\scripts\build_exe.ps1            # UI -> PyInstaller -> smoke test -> Inno Setup
+```
+
+Result: `dist\RobotDiag\RobotDiag.exe` (the app folder) and `dist\installer\RobotDiag-Setup-<version>.exe`, a per-user installer
+(no administrator; Start menu and optional desktop shortcut; needs the Edge WebView2 runtime that comes with Windows 11). Options:
+`-SkipUi` (reuse `ui\dist`), `-NoInstaller`, `-NoSmoke`. Inno Setup 6 is needed only for the installer.
+
+The installed app keeps what the user changes in `%LOCALAPPDATA%\RobotDiag` (`targets.yaml`, `sessions\`, `settings.json`,
+`logs\robot_diag.log`), never inside the install folder, so an upgrade or an uninstall does not delete recordings. On a machine without the
+sibling firmware repositories the paths in `targets.yaml` do not exist: choose the ELF files in Settings > ELF files. Not bundled and checked at run
+time on the Settings page: STM32CubeProgrammer, the ST-LINK driver, the Claude login.
+`RobotDiag.exe` opens the window; `RobotDiag.exe serve --port 8765` and the other `rdt` commands work from a terminal too.
+
 ## Safety
 
 Read-only first: no halt, no reset, no memory write while a robot can run its motors. Never open the

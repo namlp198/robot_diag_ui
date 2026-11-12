@@ -58,7 +58,7 @@ const D = {
     'tl.kind.all': 'tất cả', 'tl.kind.log': 'log', 'tl.kind.flag': 'cờ', 'tl.kind.finding': 'chẩn đoán', 'tl.kind.note': 'ghi chú', 'tl.kind.error': 'lỗi',
     'err.stopFirst': 'Hãy dừng đọc trước: thao tác này cần dùng riêng probe.', 'err.alreadyRunning': 'Đang đọc rồi; hãy dừng trước.', 'err.notRunning': 'Chưa bắt đầu đọc.',
     'err.flashBusy': 'Đang nạp firmware.', 'err.local': 'Chỉ cho phép truy cập từ máy này.', 'err.fw': 'FIRMWARE KHÔNG KHỚP: {a}/{b} đoạn flash khác với ELF. Bạn đang xem biến theo ELF không phải là firmware đang chạy.',
-    'err.noSdk': 'Chat cần claude-agent-sdk (pip install -e .[chat]).',
+    'err.noSdk': 'Chat cần claude-agent-sdk (pip install -e .[chat]).', 'err.noElf': 'Không thấy file ELF: {f}. Hãy chọn ELF ở Cài đặt > File ELF.',
     'flash.check.image_allowed_for_target': 'File nằm trong danh sách cho phép', 'flash.check.image_inside_flash_range': 'Image nằm trong vùng flash của board',
     'flash.check.probe_attached': 'Probe đã cắm', 'flash.check.board_dev_id': 'DEV_ID của board đúng',
     'nav.frames': 'Gói tin', 'nav.expr': 'Live Expressions', 'nav.settings': 'Cài đặt',
@@ -151,7 +151,7 @@ const D = {
     'tl.kind.all': 'all', 'tl.kind.log': 'log', 'tl.kind.flag': 'flag', 'tl.kind.finding': 'finding', 'tl.kind.note': 'note', 'tl.kind.error': 'error',
     'err.stopFirst': 'Stop reading first: this needs the probe exclusively.', 'err.alreadyRunning': 'Already reading; stop first.', 'err.notRunning': 'Not reading yet.',
     'err.flashBusy': 'A flash is in progress.', 'err.local': 'Local access only.', 'err.fw': 'FIRMWARE MISMATCH: {a}/{b} flash chunks differ from the ELF. The variables you see follow the ELF, not the firmware that is running.',
-    'err.noSdk': 'The chat needs claude-agent-sdk (pip install -e .[chat]).',
+    'err.noSdk': 'The chat needs claude-agent-sdk (pip install -e .[chat]).', 'err.noElf': 'ELF file not found: {f}. Choose the ELF in Settings > ELF files.',
     'flash.check.image_allowed_for_target': 'Image is on the allow-list', 'flash.check.image_inside_flash_range': 'Image is inside the board flash',
     'flash.check.probe_attached': 'Probe attached', 'flash.check.board_dev_id': 'Board DEV_ID matches',
     'nav.frames': 'Frames', 'nav.expr': 'Live Expressions', 'nav.settings': 'Settings',
@@ -238,6 +238,8 @@ export function localizeError(msg, l) {
   if (/flash is in progress/i.test(s)) return T('err.flashBusy');
   if (/local access only/i.test(s)) return T('err.local');
   if (/chat needs claude-agent-sdk/i.test(s)) return T('err.noSdk');
+  const nf = /ELF file not found: (.+?) - choose/.exec(s);
+  if (nf) return T('err.noElf', { f: nf[1] });
   const m = /FIRMWARE MISMATCH: (\d+)\/(\d+)/.exec(s);
   if (m) return T('err.fw', { a: m[1], b: m[2] });
   return s;

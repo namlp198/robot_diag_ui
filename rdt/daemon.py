@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import sys
 import threading
 from contextlib import asynccontextmanager
 import time
@@ -18,6 +19,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import paths as paths_mod
 from .cli import ROOT, elf_paths, load_targets, open_symbols
 from . import (analyzers, cantap as cantap_mod, cubecli as cubecli_mod, envcheck as envcheck_mod, firmware as firmware_mod, exprs as exprs_mod, flash as flash_mod, rcl as rcl_mod,
                reference as reference_mod, settings as settings_mod, sweep as sweep_mod)
@@ -29,7 +31,7 @@ from .vcp import VcpError, VcpReader
 RING = 4000  # samples kept per target for late-joining clients
 # Newest modification time (whole seconds) of the daemon's own code when it started: scripts/start.ps1 compares it with the
 # files on disk and restarts a daemon that is older than the code (a stale daemon serves a new UI with old endpoints).
-CODE_STAMP = int(max(p.stat().st_mtime for p in Path(__file__).parent.glob("*.py")))
+CODE_STAMP = int(max([p.stat().st_mtime for p in Path(__file__).parent.glob("*.py")] or [Path(sys.executable).stat().st_mtime]))  # installed app: the exe
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]", "::1"}
 
 
@@ -249,6 +251,8 @@ class Hub:
                                             self.on_error, image=image))
                 for name in req.vcp:
                     readers.append(VcpReader(name, self.targets[name], self.on_log, t0, self.on_error))
+            except FileNotFoundError as e:
+                raise HTTPException(400, f"ELF file not found: {e.filename} - choose the ELF in Settings > ELF files")
             except (SymbolError, VcpError, OSError) as e:
                 raise HTTPException(400, str(e))
             self.can.clear()
@@ -827,7 +831,7 @@ def create_app(hub: Hub | None = None) -> FastAPI:
         finally:
             hub.subs.discard(q)
 
-    dist = ROOT / "ui" / "dist"
+    dist = paths_mod.UI_DIST
     if dist.is_dir():  # built UI (npm run build in ui/); API and /ws routes above take precedence
         app.mount("/", StaticFiles(directory=dist, html=True), name="ui")
     return app
@@ -838,4 +842,4 @@ def serve(host: str = "127.0.0.1", port: int = 8765):
 
     if host not in ("127.0.0.1", "localhost", "::1"):
         raise SystemExit("rdt serve binds to loopback only")
-    uvicorn.run(create_app(), host=host, port=port, log_level="info")
+    uvicorn.run(create_app(), host=host, port=port, log_level="info", log_config=None if sys.stdout is None else uvicorn.config.LOGGING_CONFIG)

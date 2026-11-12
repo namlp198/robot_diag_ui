@@ -1,4 +1,4 @@
-﻿# Decision Index
+# Decision Index
 
 | ID | Title | Status | Date |
 |---|---|---|---|
@@ -10,3 +10,4 @@
 | 0006 | RCL frame view, Live Expressions, chat settings | Accepted, run on the live remote | 2026-11-12 |
 | 0007 | CAN / FDCAN frame sampling on the robot | Accepted as best effort, run once on the robot | 2026-11-12 |
 | 0008 | Native window, environment checks, ELF and firmware files in Settings | Accepted; real .bin/.hex flash not yet run | 2026-11-12 |
+| 0009 | Installable app (PyInstaller folder + Inno Setup) | Accepted; installer built, not yet installed on a clean machine | 2026-11-12 |

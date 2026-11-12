@@ -6,3 +6,5 @@ outputs/temporary/*
 !outputs/temporary/.gitkeep
 node_modules/
 ui/dist/
+/dist/
+/build/

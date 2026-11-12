@@ -9,10 +9,13 @@ import yaml
 
 from .symbols import SymbolError, SymbolTable
 
-ROOT = Path(__file__).resolve().parents[1]
+from . import paths
+
+ROOT = paths.DATA  # writable root: targets.yaml, sessions/ (the repository root when run from source)
 
 
 def load_targets(path: Path | None = None) -> dict:
+    paths.ensure_data()
     path = path or ROOT / "targets.yaml"
     return yaml.safe_load(path.read_text(encoding="utf-8"))["targets"]
 
@@ -283,8 +286,8 @@ def cmd_flash_plan(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdout, sys.stderr):  # Vietnamese text must not crash a cp1252 console
-        if hasattr(stream, "reconfigure"):
+    for stream in (sys.stdout, sys.stderr):  # Vietnamese text must not crash a cp1252 console (None in a windowed exe)
+        if stream is not None and hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(prog="rdt")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -311,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
     sv.set_defaults(fn=lambda a: __import__("rdt.daemon", fromlist=["serve"]).serve(port=a.port) or 0)
     ap_ = sub.add_parser("app", help="the UI in its own native window (needs: pip install -e .[app])")
     ap_.add_argument("--port", type=int, default=8765)
+    ap_.set_defaults(version=False)
     ap_.set_defaults(fn=lambda a: __import__("rdt.app", fromlist=["run"]).run(port=a.port))
     an = sub.add_parser("analyze", help="label a recorded session with rule-based findings")
     an.add_argument("session")
