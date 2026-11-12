@@ -7,7 +7,7 @@ dependencies = ["pyelftools>=0.31", "pyyaml>=6"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
-probe = ["pyocd==0.46.1"]
+probe = ["pyocd==0.46.1", "pyserial>=3.5"]
 
 [project.scripts]
 rdt = "rdt.cli:main"

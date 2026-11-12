@@ -10,6 +10,7 @@
 
 ## Latest change
 
+- D1: recorder (`rdt record`, `rdt replay`, `sessions/<stamp>/`), sampler, remote VCP log (`--vcp remote`; robot VCP refused in code). Verified on hardware: 6 s record of remote `s_tx` + VCP (18 lines). Older:
 - D1 slice: `rdt/backend.py` (read-only pyOCD `Probe`), `rdt watch <target> <paths> [--hz] [--count]` (CSV),
   `tests/test_backend.py` (skips without probe/ELF), `pyocd` as the `probe` extra. Checked on both boards: 5 samples of
   `s_lora_rx.filter.stats.lost` (0, robot) and `s_tx` (remote); check.ps1: 4 passed.
@@ -29,4 +30,4 @@
 
 ## Next
 
-D1 remainder: recorder (write/read back a session), VCP log of the remote, then daemon. Open S3 and S4.
+D1 remainder: daemon (FastAPI, WebSocket) owning the probes; then D2 UI. Open S3 and S4.

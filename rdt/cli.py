@@ -79,6 +79,7 @@ def cmd_record(args) -> int:
 
     from .recorder import Recorder
     from .sampler import Sampler
+    from .vcp import VcpError, VcpReader
 
     targets = load_targets()
     by_target: dict[str, list[str]] = {}
@@ -101,9 +102,25 @@ def cmd_record(args) -> int:
         return 1
     info = {s.target: {"serial": s.serial, "elf": str((ROOT / targets[s.target]["elf"]).resolve()),
                        "paths": s.paths, "vars": s.vars} for s in samplers}
+    box: list = [None]  # the recorder, filled in below; readers are built first so bad input creates no session
+    readers = []
+    for name in args.vcp:
+        if name not in targets:
+            print(f"unknown --vcp target {name!r}", file=sys.stderr)
+            return 2
+        try:
+            readers.append(VcpReader(
+                name, targets[name], lambda target, t, line: box[0].add_log(target, t, line), t0,
+                lambda target, msg: box[0].add_event(time.perf_counter() - t0, f"error:{target}", msg)))
+        except VcpError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
     root = ROOT / "sessions"
     root.mkdir(exist_ok=True)
     with Recorder(root, info, label=args.label) as rec:
+        box[0] = rec
+        for r in readers:
+            r.start()
         for s in samplers:
             s.sink = lambda target, t, vals: rec.add_sample(target, t, vals)
             s.on_error = lambda target, msg: rec.add_event(time.perf_counter() - t0, f"error:{target}", msg)
@@ -117,10 +134,12 @@ def cmd_record(args) -> int:
                     break
         except KeyboardInterrupt:
             pass
-        for s in samplers:
+        for s in [*samplers, *readers]:
             s.stop()
-        for s in samplers:
+        for s in [*samplers, *readers]:
             s.join(timeout=3)
+        for r in readers:
+            print(f"{r.target}: {r.lines} VCP lines on {r.port}", file=sys.stderr)
         for s in samplers:
             print(f"{s.target}: {s.reads} samples, {s.failures} read failures", file=sys.stderr)
     print(rec.dir)
@@ -182,6 +201,8 @@ def main(argv: list[str] | None = None) -> int:
     rc.add_argument("--hz", type=float, default=20.0)
     rc.add_argument("--seconds", type=float, default=0.0, help="0 = until Ctrl+C")
     rc.add_argument("--label", default="")
+    rc.add_argument("--vcp", action="append", default=[], metavar="TARGET",
+                    help="also record the VCP log of TARGET (refused when its log_port is null)")
     rc.set_defaults(fn=cmd_record)
     rp = sub.add_parser("replay", help="list sessions, or summarise / dump one")
     rp.add_argument("session", nargs="?")
