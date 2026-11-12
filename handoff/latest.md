@@ -10,6 +10,8 @@
 
 ## Latest change
 
+- **First real flash (2026-11-12, user-approved, remote only):** `robot_rc_rtos/SFF_Debug` (the image already on the board) flashed through `/api/flash/run`: CubeProgrammer rc=0, "Download verified successfully", flash re-compared with the ELF = match. Remote ran again right after (control_frames counting from ~2400, link_up true); the robot stayed `connected` and its `lost` rose by the expected restart jump. Bug found by this run and fixed: the daemon's post-flash verification left a probe open (next probe user hung); `read_after` is now a context manager (test added). Robot not flashed yet: waiting for the user to switch the robot off (its only way to cut motor power) while the Nucleo stays powered over USB.
+
 - D5 (2026-11-12): `rdt/sweep.py` (read-only port of link_sweep.ps1: `rdt sweep`, `/api/sweep`, Claude tool `get_sweep`, UI table + CSV; not seen with a real sweep because the remote runs a normal build) and `rdt/flash.py` (gated flashing, decision 0003): `rdt flash-plan` dry run, `/api/flash/plan|run|candidates`, UI card with confirm phrase and motors-safe checkbox. **No board was flashed.** Dry runs on both boards: flashed images give PLAN OK (already flashed), robot_att / ATT images refused. 56 tests pass.
 - `targets.yaml` now has `dev_id`, `idcode_addr`, `flash_range`, `allowed_images`, `needs_motors_safe` per target.
 

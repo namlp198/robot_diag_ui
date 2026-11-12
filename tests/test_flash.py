@@ -90,3 +90,21 @@ def test_image_changed_after_plan_is_refused(tmp_path):
     p.sha256 = "0" * 64
     with pytest.raises(FlashError, match="changed"):
         run(p, log_dir=tmp_path, confirm=p.confirm)
+
+
+def test_post_flash_probe_is_released(tmp_path):
+    closed = []
+
+    class FakeProbe:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            closed.append(True)
+
+        def read(self, addr, n):
+            return bytes([255]) * n
+
+    p = mk()
+    res, _ = run(p, log_dir=tmp_path, read_after=FakeProbe)
+    assert closed == [True] and res["verified_after"] is False  # 0xFF flash does not match the image

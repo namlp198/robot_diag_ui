@@ -128,7 +128,8 @@ def plan(target: str, cfg: dict, image: Path, base: Path, read: Callable[[int, i
 
 
 def run(p: FlashPlan, cfg: dict, confirm: str, motors_safe: bool, repo_root: Path, log_dir: Path,
-        runner: Callable = subprocess.run, read_after: Callable[[], Callable[[int, int], bytes]] | None = None) -> dict:
+        runner: Callable = subprocess.run,
+        read_after: Callable[[], object] | None = None) -> dict:  # read_after: context manager with .read(addr, n)
     if not p.ok:
         raise FlashError("plan has failed checks: " + "; ".join(c.name for c in p.checks if not c.ok))
     if confirm != p.confirm:
@@ -144,7 +145,8 @@ def run(p: FlashPlan, cfg: dict, confirm: str, motors_safe: bool, repo_root: Pat
     verified = None
     if ok and read_after is not None:
         try:
-            verified = verify(read_after(), Path(p.image)).ok
+            with read_after() as probe:  # a context manager (e.g. rdt.backend.Probe): must release the probe
+                verified = verify(probe.read, Path(p.image)).ok
         except Exception:
             verified = False
     result = {"target": p.target, "image": p.image, "sha256": p.sha256, "started_utc": started,

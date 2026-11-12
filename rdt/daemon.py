@@ -409,7 +409,7 @@ def create_app(hub: Hub | None = None) -> FastAPI:
         hub.flashing = True
         try:
             return flash_mod.run(p, cfg, req.confirm, req.motors_safe, ROOT, hub.sessions_dir,
-                                 read_after=lambda: Probe(cfg["probe_serial"]).open().read)
+                                 read_after=lambda: Probe(cfg["probe_serial"]))
         except flash_mod.FlashError as e:
             raise HTTPException(400, str(e))
         finally:
