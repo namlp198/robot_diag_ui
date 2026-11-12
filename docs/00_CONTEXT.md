@@ -10,7 +10,8 @@ web UI, and an embedded Claude Code chat that sees the same data. Full design an
 
 - Done: repo scaffold, `targets.yaml`, `rdt/symbols.py` (spike S2), `rdt resolve`, spike S1 (probe speed,
   decision 0001: pyOCD for reads).
-- Not done: S3 Agent SDK, S4 SWO, daemon, UI, chat, recorder, analyzers.
+- Done (D1): backend, sampler, recorder/replay (`sessions/`), remote VCP log, daemon `rdt serve`.
+- Not done: S3 Agent SDK, S4 SWO, UI (D2), chat (D3), analyzers (D4), scripts and flashing (D5).
 - Verified on hardware (2026-11-12): read-only SWD attach and 164 B reads on both boards while running.
 - Not verified: CM4 stays running during CM7 attach; the flashed firmware equals the ELF in the sibling repo.
 

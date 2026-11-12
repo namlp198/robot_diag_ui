@@ -204,6 +204,9 @@ def main(argv: list[str] | None = None) -> int:
     rc.add_argument("--vcp", action="append", default=[], metavar="TARGET",
                     help="also record the VCP log of TARGET (refused when its log_port is null)")
     rc.set_defaults(fn=cmd_record)
+    sv = sub.add_parser("serve", help="run the daemon (HTTP + WebSocket on 127.0.0.1)")
+    sv.add_argument("--port", type=int, default=8765)
+    sv.set_defaults(fn=lambda a: __import__("rdt.daemon", fromlist=["serve"]).serve(port=a.port) or 0)
     rp = sub.add_parser("replay", help="list sessions, or summarise / dump one")
     rp.add_argument("session", nargs="?")
     rp.add_argument("--csv", action="store_true")
