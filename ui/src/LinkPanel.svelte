@@ -1,21 +1,20 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import uPlot from 'uplot';
   import 'uplot/dist/uPlot.min.css';
   import { RATES } from './panels.js';
   import { series } from './store.js';
-  import { rate } from './util.js';
+  import { rate, chartColors } from './util.js';
+  import { t, theme } from './i18n.js';
 
-  const COLORS = ['#2b6cff', '#d23b3b', '#e08a00', '#1e8e4e', '#8a4fd0'];
   const WINDOW_S = 60;
   const charts = {}; // target -> { plot, el }
   let els = {};
 
   function build(target) {
     const list = RATES[target];
-    const css = getComputedStyle(document.documentElement);
-    const text = css.getPropertyValue('--muted').trim() || '#666';
-    const line = css.getPropertyValue('--line').trim() || '#ddd';
+    const { text, line, series: COLORS } = chartColors();
     const opts = {
       width: els[target].clientWidth || 400, height: 170,
       scales: { x: { time: false } },
@@ -44,20 +43,29 @@
   });
 
   onMount(() => Object.keys(RATES).forEach(build));
+  // The theme changed: uPlot colours are fixed at creation, so rebuild the charts with the new palette.
+  // (A plain subscription, not a `$:` block: a reactive block that touches `charts` would re-trigger itself.)
+  function rebuild() {
+    for (const k of Object.keys(RATES)) { charts[k]?.destroy(); if (els[k]) build(k); }
+    draw(get(series));
+  }
+  let first = true;
+  const unsubTheme = theme.subscribe(() => { if (first) { first = false; return; } queueMicrotask(rebuild); });
   onDestroy(() => {
     unsub();
+    unsubTheme();
     cancelAnimationFrame(raf);
     Object.values(charts).forEach((c) => c.destroy());
   });
 </script>
 
 <div class="card">
-  <h2>2. Link LoRa (sự kiện / giây)</h2>
+  <h2>{$t('link.title')}</h2>
   {#each Object.keys(RATES) as target}
-    <div class="muted small">{target === 'robot' ? 'Robot (H755): nhận' : 'Remote (F446): gửi và nhận'}</div>
+    <div class="muted small">{$t(target === 'robot' ? 'link.robot' : 'link.remote')}</div>
     <div bind:this={els[target]} class="chart"></div>
   {/each}
-  <p class="muted small">Hai board không chung đồng hồ: trục thời gian là đồng hồ máy tính lúc nhận mẫu, sai số bằng chu kỳ poll.</p>
+  <p class="muted small">{$t('link.note')}</p>
 </div>
 
 <style>

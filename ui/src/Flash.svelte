@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { status } from './store.js';
+  import { t } from './i18n.js';
 
   let cands = {};
   let target = 'remote';
@@ -39,30 +40,30 @@
 </script>
 
 <div class="card">
-  <h2>Nạp firmware (có chốt an toàn)</h2>
-  <p class="muted small">Ghi vào board thật. Chỉ nhận file .elf khớp danh sách cho phép của board, kiểm DEV_ID, và cần gõ đúng cụm xác nhận. Claude không có công cụ nạp.</p>
+  <h2>{$t('flash.title')}</h2>
+  <p class="muted small">{$t('flash.warn')}</p>
   <div class="bar">
     <select bind:value={target}>{#each Object.keys(cands) as t}<option value={t}>{t}</option>{/each}</select>
     <select bind:value={image}>{#each list as f}<option value={f}>{name(f)}</option>{/each}</select>
-    <button on:click={dry} disabled={!stopped || !image || busy}>Kiểm tra (không ghi)</button>
-    {#if !stopped}<span class="muted">Dừng đọc trước: nạp cần dùng riêng probe.</span>{/if}
+    <button on:click={dry} disabled={!stopped || !image || busy}>{$t('flash.dry')}</button>
+    {#if !stopped}<span class="muted">{$t('flash.stopFirst')}</span>{/if}
   </div>
   {#if err}<div class="bad">{err}</div>{/if}
   {#if plan}
     {#each plan.checks as c}<div class={c.ok ? 'ok' : 'bad'}>{c.ok ? '✓' : '✕'} {c.name}: {c.detail}</div>{/each}
-    {#if plan.already_flashed}<div class="muted">Board đang chạy đúng image này; nạp lại là không đổi gì.</div>{/if}
+    {#if plan.already_flashed}<div class="muted">{$t('flash.already')}</div>{/if}
     <div class="muted mono small">{plan.command.join(' ')}</div>
     {#if plan.ok}
       <div class="confirm">
-        {#if plan.needs_motors_safe}<label><input type="checkbox" bind:checked={safe} /> Bánh đã kê khỏi mặt đất, tôi đứng cạnh robot và sẵn sàng tắt nguồn ngay</label>{/if}
-        <div>Gõ đúng: <code>{plan.confirm}</code></div>
+        {#if plan.needs_motors_safe}<label><input type="checkbox" bind:checked={safe} /> {$t('flash.safe')}</label>{/if}
+        <div>{$t('flash.typeExactly')} <code>{plan.confirm}</code></div>
         <input bind:value={typed} placeholder={plan.confirm} />
-        <button class="danger" on:click={go} disabled={busy || typed !== plan.confirm || (plan.needs_motors_safe && !safe)}>Nạp</button>
+        <button class="danger" on:click={go} disabled={busy || typed !== plan.confirm || (plan.needs_motors_safe && !safe)}>{$t('flash.go')}</button>
       </div>
-    {:else}<div class="bad">Kế hoạch bị từ chối: sửa các mục ✕ rồi kiểm tra lại.</div>{/if}
+    {:else}<div class="bad">{$t('flash.rejected')}</div>{/if}
   {/if}
   {#if result}
-    <div class={result.programmed ? 'ok' : 'bad'}>{result.programmed ? 'Đã nạp' : 'Nạp lỗi'} (mã {result.returncode}); so lại flash với ELF: {result.verified_after === null ? 'không chạy' : result.verified_after ? 'khớp' : 'KHÔNG khớp'}</div>
+    <div class={result.programmed ? 'ok' : 'bad'}>{$t(result.programmed ? 'flash.done' : 'flash.failed')} {$t('flash.after', { rc: result.returncode, v: $t(result.verified_after === null ? 'flash.vNone' : result.verified_after ? 'flash.vOk' : 'flash.vBad') })}</div>
     <pre class="small">{result.output_tail}</pre>
   {/if}
 </div>

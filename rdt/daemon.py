@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .cli import ROOT, elf_paths, load_targets, open_symbols
-from . import analyzers, flash as flash_mod, sweep as sweep_mod
+from . import analyzers, cubecli as cubecli_mod, flash as flash_mod, reference as reference_mod, sweep as sweep_mod
 from .recorder import Recorder, list_sessions, open_session
 from .sampler import Sampler
 from .symbols import SymbolError, SymbolTable
@@ -46,6 +46,14 @@ class FlashRequest(BaseModel):
     image: str
     confirm: str = ""
     motors_safe: bool = False
+
+
+class CubeRequest(BaseModel):
+    command: str
+    target: str = ""
+    address: str | int | None = None
+    size: str | int | None = None
+    dry_run: bool = False
 
 
 class ChatRequest(BaseModel):
@@ -414,6 +422,33 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             raise HTTPException(400, str(e))
         finally:
             hub.flashing = False
+
+    @app.get("/api/reference")
+    def reference_data():
+        """Bilingual reference: monitored variables, pyOCD and STM32_Programmer_CLI commands (rdt.reference)."""
+        return reference_mod.REFERENCE
+
+    @app.post("/api/cube/run")
+    def cube_run(req: CubeRequest):
+        """Read-only STM32_Programmer_CLI commands (whitelist in rdt.cubecli). Needs the probe free (watch stopped)."""
+        cfg = None
+        if req.command != "list":
+            if req.target not in hub.targets:
+                raise HTTPException(404, "unknown target")
+            cfg = hub.targets[req.target]
+        if hub.running or hub.flashing:
+            raise HTTPException(409, "stop reading first: the CLI needs the probe exclusively")
+        try:
+            args = cubecli_mod.build(req.command, cfg, req.address, req.size)
+            if req.dry_run:
+                return {"command": args, "returncode": None, "output": ""}
+            hub.flashing = True  # blocks /api/watch while the CLI holds the probe
+            try:
+                return cubecli_mod.run(args)
+            finally:
+                hub.flashing = False
+        except cubecli_mod.CubeCliError as e:
+            raise HTTPException(400, str(e))
 
     @app.get("/api/sweep")
     def sweep_live():

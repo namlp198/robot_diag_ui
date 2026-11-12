@@ -46,6 +46,10 @@ cd ui; npm install; npm run build; cd ..     # builds ui/dist
 
 The daemon listens on 127.0.0.1 only and owns the probes: close CubeIDE/CubeProgrammer sessions on the same probes and
 run one daemon at a time. Other commands: `rdt watch|record|replay|analyze|sweep|flash-plan|resolve` (see `rdt --help`).
+The UI has a dark (default) and a light theme and Vietnamese/English (buttons top right; remembered in the browser).
+Pages: Dashboard, Programmer CLI (read-only `STM32_Programmer_CLI` commands) and Reference (monitored variables, rules,
+pyOCD and `STM32_Programmer_CLI` commands with their meaning; the same text is in `docs/REFERENCE.en.md` and
+`docs/REFERENCE.vi.md`, regenerated with `python -I scripts/gen_reference.py` after editing `rdt/reference.py`).
 Optional env: `RDT_CHAT_MODEL`, `RDT_CHAT_MAX_USD` (chat cost cap, default 2.0).
 
 `targets.yaml` paths to ELF files are relative to this repo and point at the sibling repos

@@ -4,9 +4,9 @@
   import uPlot from 'uplot';
   import 'uplot/dist/uPlot.min.css';
   import { claudeCharts, series, highlights } from './store.js';
-  import { rate } from './util.js';
+  import { rate, chartColors } from './util.js';
+  import { t, theme } from './i18n.js';
 
-  const COLORS = ['#2b6cff', '#d23b3b', '#e08a00', '#1e8e4e', '#8a4fd0', '#0097a7'];
   const plots = new Map(); // id -> { u, el, spec }
   const hosts = {};
   let hl = [];
@@ -32,9 +32,7 @@
   }
 
   function make(spec, el) {
-    const css = getComputedStyle(document.documentElement);
-    const text = css.getPropertyValue('--muted').trim() || '#666';
-    const line = css.getPropertyValue('--line').trim() || '#ddd';
+    const { text, line, series: COLORS } = chartColors();
     const u = new uPlot({
       width: el.clientWidth || 400, height: 180, scales: { x: { time: false } },
       axes: [{ stroke: text, grid: { stroke: line } }, { stroke: text, grid: { stroke: line }, size: 46 }],
@@ -62,6 +60,9 @@
   }
   $: hl = $highlights, refresh($series);
   $: sync($claudeCharts);
+  let firstTheme = true;
+  // theme changed: drop the plots so sync() rebuilds them with the new palette
+  $: { $theme; if (firstTheme) firstTheme = false; else { plots.forEach((p) => p.u.destroy()); plots.clear(); sync($claudeCharts); } }
   function sync(list) {
     queueMicrotask(() => {
       const ids = new Set(list.map((c) => c.id));
@@ -77,12 +78,12 @@
 
 {#if $claudeCharts.length}
   <div class="card">
-    <h2>Đồ thị Claude vẽ</h2>
+    <h2>{$t('cc.title')}</h2>
     {#each $claudeCharts as c (c.id)}
-      <div class="title">{c.title || 'đồ thị'} <span class="muted mono">{c.from ?? ''}{c.from != null || c.to != null ? '–' : ''}{c.to ?? ''}</span></div>
+      <div class="title">{c.title || $t('cc.chart')} <span class="muted mono">{c.from ?? ''}{c.from != null || c.to != null ? '–' : ''}{c.to ?? ''}</span></div>
       <div bind:this={hosts[c.id]} class="chart"></div>
     {/each}
-    {#each $highlights as h}<div class="muted mono">vùng {h.t0}–{h.t1} s {h.label}</div>{/each}
+    {#each $highlights as h}<div class="muted mono">{$t('cc.band', { t0: h.t0, t1: h.t1, label: h.label })}</div>{/each}
   </div>
 {/if}
 

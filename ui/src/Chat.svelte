@@ -2,6 +2,7 @@
   import { afterUpdate } from 'svelte';
   import { chat, conn, sendChat, stopChat, resetChat, series } from './store.js';
   import { RATES } from './panels.js';
+  import { t } from './i18n.js';
 
   let text = '';
   let err = '';
@@ -30,9 +31,9 @@
 
 <aside class="card chat">
   <div class="top">
-    <h2>Chat Claude</h2>
-    <span class="muted mono">{$chat.model ?? 'chưa kết nối'}{$chat.cost ? ` · $${$chat.cost.toFixed(3)}` : ''}</span>
-    <button on:click={resetChat} title="Cuộc trò chuyện mới">Mới</button>
+    <h2>{$t('chat.title')}</h2>
+    <span class="muted mono">{$chat.model ?? $t('chat.noModel')}{$chat.cost ? ` · $${$chat.cost.toFixed(3)}` : ''}</span>
+    <button on:click={resetChat} title={$t('chat.newTip')}>{$t('chat.new')}</button>
   </div>
   <div class="msgs" bind:this={box}>
     {#each $chat.items as m}
@@ -41,7 +42,7 @@
       {:else if m.k === 'assistant'}
         <div class="m bot">{m.text}{#if m.streaming}<span class="cursor">▍</span>{/if}</div>
         {#if m.text.includes('Not logged in')}
-          <div class="m err">Chat dùng bản Claude Code đi kèm SDK, chưa đăng nhập. Chạy một lần trong terminal rồi hỏi lại:<br /><code>.venv\Lib\site-packages\claude_agent_sdk\_bundled\claude.exe auth login</code></div>
+          <div class="m err">{$t('chat.login')}<br /><code>.venv\Lib\site-packages\claude_agent_sdk\_bundled\claude.exe auth login</code></div>
         {/if}
       {:else if m.k === 'tool'}
         <button class="m tool {m.state}" on:click={() => (open[m.id] = !open[m.id])}>
@@ -53,13 +54,13 @@
         <div class="m err">{m.text}</div>
       {/if}
     {:else}
-      <div class="muted">Hỏi về dữ liệu đang xem, ví dụ: "link có mất gói không?". Claude chỉ có tool đọc và hiển thị; không ghi, không reset, không nạp.</div>
+      <div class="muted">{$t('chat.empty')}</div>
     {/each}
   </div>
   {#if err}<div class="err small">{err}</div>{/if}
   <div class="input">
-    <textarea rows="2" bind:value={text} on:keydown={key} placeholder="Hỏi Claude… (Enter gửi)" disabled={$chat.busy}></textarea>
-    {#if $chat.busy}<button class="danger" on:click={stopChat}>Dừng</button>{:else}<button class="primary" on:click={send} disabled={!text.trim()}>Gửi</button>{/if}
+    <textarea rows="2" bind:value={text} on:keydown={key} placeholder={$t('chat.placeholder')} disabled={$chat.busy}></textarea>
+    {#if $chat.busy}<button class="danger" on:click={stopChat}>{$t('chat.stop')}</button>{:else}<button class="primary" on:click={send} disabled={!text.trim()}>{$t('chat.send')}</button>{/if}
   </div>
 </aside>
 

@@ -1,17 +1,17 @@
-// What the dashboard shows. Variable paths are resolved by the daemon from the flashed ELF (never offsets).
+﻿// What the dashboard shows. Variable paths are resolved by the daemon from the flashed ELF (never offsets).
 // A stage with no `var` is a part of the chain that has no variable to read yet: it is shown grey, not green.
 
 export const STALE_S = 1.5; // a stage counter that did not change for this long is drawn red
 
 export const STAGES = [
-  { id: 'app', label: 'Remote: ứng dụng/đầu vào', target: 'remote', value: 's_app_input.data.controls.drive_ud', counter: 's_app_input.data.alive_tick' },
-  { id: 'arb', label: 'Remote: arbiter', target: 'remote', value: 's_tx.out.source', flag: 's_tx.arbiter.armed' },
-  { id: 'out', label: 'Remote: CONTROL gửi đi', target: 'remote', value: 's_tx.out.sent.drive_ud', counter: 's_tx.out.control_frames' },
-  { id: 'air', label: 'Không trung (LoRa)', target: null, note: 'không có biến' },
-  { id: 'par', label: 'Robot: parser', target: 'robot', counter: 's_lora_rx.parser.stats.frames' },
-  { id: 'flt', label: 'Robot: filter', target: 'robot', counter: 's_lora_rx.filter.stats.accepted' },
-  { id: 'inp', label: 'Robot: input', target: 'robot', value: 's_lora_rx.input.drive_ud', counter: 's_lora_rx.control_frames' },
-  { id: 'can', label: 'Kinematics → CAN rpm', target: null, note: 'chưa có biến' },
+  { id: 'app', target: 'remote', value: 's_app_input.data.controls.drive_ud', counter: 's_app_input.data.alive_tick' },
+  { id: 'arb', target: 'remote', value: 's_tx.out.source', flag: 's_tx.arbiter.armed' },
+  { id: 'out', target: 'remote', value: 's_tx.out.sent.drive_ud', counter: 's_tx.out.control_frames' },
+  { id: 'air', target: null, note: 'stage.noVar' },
+  { id: 'par', target: 'robot', counter: 's_lora_rx.parser.stats.frames' },
+  { id: 'flt', target: 'robot', counter: 's_lora_rx.filter.stats.accepted' },
+  { id: 'inp', target: 'robot', value: 's_lora_rx.input.drive_ud', counter: 's_lora_rx.control_frames' },
+  { id: 'can', target: null, note: 'stage.noVarYet' },
 ];
 
 // Counters drawn as rates (per second) in the link panel, one chart per board.
@@ -37,7 +37,7 @@ export const FLAGS = [
   { target: 'remote', path: 's_link.link_up', label: 'remote link_up' },
   { target: 'remote', path: 's_tx.arbiter.armed', label: 'remote armed' },
   { target: 'remote', path: 's_tx.out.input_valid', label: 'remote input_valid' },
-  { target: 'remote', path: 's_tx.out.sent.estop', label: 'remote ESTOP gửi', bad: true },
+  { target: 'remote', path: 's_tx.out.sent.estop', label: 'remote ESTOP', key: 'flag.sentEstop', bad: true },
   { target: 'robot', path: 's_lora_rx.connected', label: 'robot connected' },
   { target: 'robot', path: 's_lora_rx.input.connected', label: 'robot input.connected' },
   { target: 'robot', path: 's_lora_rx.input.button_emergency', label: 'robot emergency', bad: true },
