@@ -190,6 +190,33 @@ def test_env_endpoints_use_the_envcheck_module(client, monkeypatch):
     assert client.post("/api/dialog/open", json={"kind": "elf"}).json()["path"] == "C:/picked/elf.elf"
 
 
+def test_chat_history_endpoints(client, tmp_path):
+    import base64
+    from rdt.chatstore import ChatStore
+    store = ChatStore(tmp_path / "chats")
+    a = store.create("first question")
+    store.save_file(a, "shot.png", b"\x89PNG\r\n\x1a\n" + b"0" * 20)
+    store.save_file(a, "notes.txt", b"<script>alert(1)</script>")
+    store.append(a, {"type": "chat", "kind": "user", "text": "first question"})
+    store.append(a, {"type": "chat", "kind": "text", "text": "an answer"})
+    j = client.get("/api/chats").json()
+    assert [c["id"] for c in j["chats"]] == [a] and j["current"] is None
+    g = client.get(f"/api/chats/{a}").json()
+    assert g["meta"]["title"] == "first question" and [e["kind"] for e in g["events"]] == ["user", "text"]
+    img = client.get(f"/api/chats/{a}/files/001_shot.png")
+    assert img.status_code == 200 and img.headers["content-type"] == "image/png" and "inline" in img.headers["content-disposition"]
+    txt = client.get(f"/api/chats/{a}/files/002_notes.txt")
+    assert "attachment" in txt.headers["content-disposition"] and txt.headers["content-type"] == "application/octet-stream" and txt.headers["x-content-type-options"] == "nosniff"
+    assert client.get(f"/api/chats/{a}/files/..%2Fmeta.json").status_code in (404, 400)
+    r = client.get("/api/chats/..%2F..")   # may fall through to the static UI (200 HTML) but never to a chat\n    assert r.status_code in (404, 400) or "application/json" not in r.headers.get("content-type", "")
+    assert client.get("/api/chats/20261112_000000_aaaa").status_code == 404
+    assert client.patch(f"/api/chats/{a}", json={"title": "Renamed"}).json()["title"] == "Renamed"
+    assert client.patch(f"/api/chats/{a}", json={"title": " "}).status_code == 400
+    assert "Renamed" in client.get(f"/api/chats/{a}/export").text
+    assert client.post("/api/chat", json={"text": "  ", "attachments": []}).status_code == 422
+    assert client.delete(f"/api/chats/{a}").json() == {"ok": True} and client.get("/api/chats").json()["chats"] == []
+
+
 def test_symbols_search(client):
     elf = (ROOT / load_targets()["robot"]["elf"]).resolve()
     if not elf.exists():

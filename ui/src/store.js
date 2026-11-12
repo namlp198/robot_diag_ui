@@ -8,7 +8,9 @@ export const latest = writable({}); // target -> path -> { v, t, changed }
 export const series = writable({}); // target -> { cols: [path], t: [], v: { path: [] } }
 export const events = writable([]); // { t, target, kind, text }
 export const replayName = writable(null);
-export const chat = writable({ items: [], busy: false, model: null, cost: 0, sessionId: null });
+export const chat = writable({ items: [], busy: false, model: null, cost: 0, sessionId: null, chatId: null });
+export const showTools = writable((() => { try { return localStorage.getItem('rdt.showTools') !== '0'; } catch { return true; } })());
+showTools.subscribe((v) => { try { localStorage.setItem('rdt.showTools', v ? '1' : '0'); } catch { /* not persisted */ } });
 export const claudeCharts = writable([]); // { id, title, series: [{target,path,as}], from, to }
 export const highlights = writable([]);
 export const frames = writable([]); // decoded RCL frames (rdt/rcl.py), live or from a recorded session
@@ -22,7 +24,7 @@ function chatEvent(m) {
     const items = c.items;
     const last = items[items.length - 1];
     switch (m.kind) {
-      case 'user': items.push({ k: 'user', text: m.text }); c.busy = true; break;
+      case 'user': items.push({ k: 'user', text: m.text, attachments: m.attachments ?? [], chatId: m.chat_id ?? c.chatId }); c.chatId = m.chat_id ?? c.chatId; c.busy = true; break;
       case 'init': c.model = m.model; c.sessionId = m.session_id; break;
       case 'text_delta':
         if (last && last.k === 'assistant' && last.streaming) last.text += m.text;
@@ -52,14 +54,36 @@ function uiCommand(m) {
   else if (m.cmd === 'annotate') pushEvent({ t: m.t, target: m.target || 'claude', kind: 'note', text: m.text });
 }
 
-export async function sendChat(text, view) {
-  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, view }) });
+// attachments: [{ name, data (base64) }] from ui/src/attach.js
+export async function sendChat(text, view, attachments = []) {
+  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, view, attachments: attachments.map(({ name, data }) => ({ name, data })) }) });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? r.statusText);
+}
+
+// --- saved conversations ---
+async function jreq(method, url, body) {
+  const r = await fetch(url, { method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail ?? r.statusText);
+  return j;
+}
+export const listChats = () => jreq('GET', '/api/chats');
+export const renameChat = (id, title) => jreq('PATCH', '/api/chats/' + id, { title });
+export const deleteChat = (id) => jreq('DELETE', '/api/chats/' + id);
+// Opens a saved chat: the daemon makes it the current conversation (the next message resumes it) and the UI replays its events.
+export async function openChat(id) {
+  const j = await jreq('POST', '/api/chats/' + id + '/open');
+  chat.set({ items: [], busy: false, model: null, cost: 0, sessionId: j.meta.session_id, chatId: id });
+  claudeCharts.set([]);
+  highlights.set([]);
+  for (const ev of j.events) chatEvent(ev);
+  chat.update((c) => { c.busy = false; c.cost = j.meta.cost_usd ?? 0; c.items.forEach((x) => (x.streaming = false)); return c; });
+  return j.meta;
 }
 export const stopChat = () => fetch('/api/chat/stop', { method: 'POST' });
 export async function resetChat() {
   await fetch('/api/chat/reset', { method: 'POST' });
-  chat.set({ items: [], busy: false, model: null, cost: 0, sessionId: null });
+  chat.set({ items: [], busy: false, model: null, cost: 0, sessionId: null, chatId: null });
   claudeCharts.set([]);
   highlights.set([]);
 }

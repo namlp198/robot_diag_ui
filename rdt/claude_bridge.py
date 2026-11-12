@@ -17,6 +17,7 @@ from claude_agent_sdk import (
     UserMessage, create_sdk_mcp_server, tool,
 )
 
+from . import attachments as attach_mod
 from .agent_tools import ToolBox
 
 MODEL = os.environ.get("RDT_CHAT_MODEL", "claude-sonnet-5-5")
@@ -159,14 +160,25 @@ def make_options(box: ToolBox, resume: str | None = None, settings=None) -> Clau
 class ChatSession:
     """One conversation. `emit(dict)` delivers events to the UI (WebSocket)."""
 
-    def __init__(self, box: ToolBox, emit: Callable[[dict], None], settings=None):
+    def __init__(self, box: ToolBox, emit: Callable[[dict], None], settings=None, store=None):
         self.box = box
-        self.emit = emit
+        self._publish = emit
         self.settings = settings
+        self.store = store                   # rdt.chatstore.ChatStore or None: conversations are saved when given
+        self.chat_id: str | None = None      # id of the saved conversation this session writes to
         self.session_id: str | None = None
         self._client: ClaudeSDKClient | None = None
         self._task: asyncio.Task | None = None
         self.busy = False
+
+    def emit(self, ev: dict):
+        """Saves the event in the open conversation (the UI replays saved events) and sends it to the UI."""
+        if self.store is not None and self.chat_id:
+            try:
+                self.store.append(self.chat_id, ev)
+            except Exception:  # a full disk must not stop the chat
+                pass
+        self._publish(ev)
 
     async def _ensure(self) -> ClaudeSDKClient:
         if self._client is None:
@@ -175,27 +187,67 @@ class ChatSession:
             self._client = c
         return self._client
 
-    def start_turn(self, text: str, view: dict | None = None):
+    def start_turn(self, text: str, view: dict | None = None, attachments: list[dict] | None = None):
+        """Raises RuntimeError when busy and AttachmentError for files that are not acceptable (nothing is sent then)."""
         if self.busy:
             raise RuntimeError("a turn is already running")
+        files = attach_mod.prepare(attachments or [])
         if view:
             self.box.view = view
+        meta = []
+        if self.store is not None:
+            if self.chat_id is None:
+                self.chat_id = self.store.create(text or (files[0].name if files else ""), self.settings.current.model if self.settings else MODEL)
+            for f in files:
+                m = f.meta()
+                m["file"] = self.store.save_file(self.chat_id, f.name, f.data)
+                meta.append(m)
+        else:
+            meta = [f.meta() for f in files]
         self.busy = True
-        self._task = asyncio.create_task(self._turn(text))
+        self._task = asyncio.create_task(self._turn(text, files, meta))
 
-    async def _turn(self, text: str):
-        self.emit({"type": "chat", "kind": "user", "text": text})
+    async def _prompt(self, text: str, files):
+        if not files:
+            return text
+        blocks = attach_mod.content_blocks(text or "(see the attached files)", files)
+
+        async def one():
+            yield {"type": "user", "message": {"role": "user", "content": blocks}, "parent_tool_use_id": None}
+        return one()
+
+    async def _turn(self, text: str, files=(), meta=()):
+        self.emit({"type": "chat", "kind": "user", "text": text, "attachments": list(meta), "chat_id": self.chat_id})
         try:
-            c = await self._ensure()
-            await c.query(text)
-            async for m in c.receive_response():
-                self._translate(m)
+            for attempt in (1, 2):
+                try:
+                    c = await self._ensure()
+                    await c.query(await self._prompt(text, files))
+                    async for m in c.receive_response():
+                        self._translate(m)
+                    break
+                except Exception as e:
+                    # A saved chat is resumed from the Claude Code transcript; if that is gone, continue without it once.
+                    if attempt == 1 and self.session_id and "no conversation found" in str(e).lower():
+                        self.session_id = None
+                        await self._drop()
+                        self.emit({"type": "chat", "kind": "error", "text": "The Claude Code transcript of this chat is gone: continuing with a fresh context (the messages above stay readable here)."})
+                        continue
+                    raise
         except Exception as e:  # SDK/CLI failure: show it, keep the daemon up
             self.emit({"type": "chat", "kind": "error", "text": f"{type(e).__name__}: {e}"})
             await self._drop()
         finally:
             self.busy = False
             self.emit({"type": "chat", "kind": "idle"})
+
+    async def open_chat(self, chat_id: str):
+        """Makes a saved conversation the current one: the next message continues it (resuming its Claude Code session)."""
+        if self.busy:
+            raise RuntimeError("a turn is already running")
+        meta = self.store.meta(chat_id)              # raises ChatNotFound
+        await self._drop()
+        self.chat_id, self.session_id = chat_id, meta.get("session_id")
 
     def _translate(self, m):
         if isinstance(m, StreamEvent):
@@ -204,6 +256,11 @@ class ChatSession:
                 self.emit({"type": "chat", "kind": "text_delta", "text": ev["delta"]["text"]})
         elif isinstance(m, SystemMessage) and getattr(m, "subtype", "") == "init":
             self.session_id = m.data.get("session_id", self.session_id)
+            if self.store is not None and self.chat_id:
+                try:
+                    self.store.update(self.chat_id, session_id=self.session_id, model=m.data.get("model") or "")
+                except Exception:
+                    pass
             self.emit({"type": "chat", "kind": "init", "model": m.data.get("model"), "session_id": self.session_id})
         elif isinstance(m, AssistantMessage):
             for b in m.content:
@@ -221,6 +278,11 @@ class ChatSession:
                                "text": str(b.content)[:600]})
         elif isinstance(m, ResultMessage):
             self.session_id = m.session_id or self.session_id
+            if self.store is not None and self.chat_id and m.total_cost_usd:
+                try:
+                    self.store.add_cost(self.chat_id, (self.store.meta(self.chat_id).get("cost_usd") or 0.0) + float(m.total_cost_usd))
+                except Exception:
+                    pass
             self.emit({"type": "chat", "kind": "result", "error": bool(m.is_error), "turns": m.num_turns,
                        "cost_usd": m.total_cost_usd, "session_id": self.session_id})
 

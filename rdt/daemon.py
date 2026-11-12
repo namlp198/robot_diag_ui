@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from . import paths as paths_mod
 from .cli import ROOT, elf_paths, load_targets, open_symbols
-from . import (analyzers, cantap as cantap_mod, cubecli as cubecli_mod, envcheck as envcheck_mod, firmware as firmware_mod, exprs as exprs_mod, flash as flash_mod, rcl as rcl_mod,
+from . import (analyzers, cantap as cantap_mod, chatstore as chatstore_mod, attachments as attach_mod, cubecli as cubecli_mod, envcheck as envcheck_mod, firmware as firmware_mod, exprs as exprs_mod, flash as flash_mod, rcl as rcl_mod,
                reference as reference_mod, settings as settings_mod, sweep as sweep_mod)
 from .recorder import Recorder, list_sessions, open_session
 from .sampler import Sampler
@@ -65,8 +65,9 @@ class CubeRequest(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=4000)
+    text: str = Field("", max_length=4000)
     view: dict | None = None
+    attachments: list[dict] = []   # [{name, data: base64}], validated by rdt.attachments
 
 
 class RecordRequest(BaseModel):
@@ -96,6 +97,7 @@ class Hub:
         self.box = None
         self.settings = settings_mod.Store(self.sessions_dir / "settings.json")
         self.apply_settings()
+        self.chats = chatstore_mod.ChatStore(self.sessions_dir / "chats")  # saved chats live with the sessions (git-ignored; DATA\sessions in the installed app)
         self.exprs: dict[str, list] = {}          # live expressions per target (rdt.exprs.Expr)
         self.expr_specs: dict[str, list] = {}     # as sent by the UI (including refused ones)
         self.expr_info: dict[str, list] = {}      # resolved info or error per spec
@@ -383,7 +385,7 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             except ImportError as e:
                 raise HTTPException(501, f"chat needs claude-agent-sdk: pip install -e .[chat] ({e})")
             hub.box = ToolBox(hub, ui=lambda m: hub._publish({"type": "ui", **m}))
-            hub.chat = ChatSession(hub.box, emit=hub._publish, settings=hub.settings)
+            hub.chat = ChatSession(hub.box, emit=hub._publish, settings=hub.settings, store=hub.chats)
         return hub.chat
 
     auth_cache: dict = {"t": 0.0, "v": None}
@@ -396,6 +398,73 @@ def create_app(hub: Hub | None = None) -> FastAPI:
         v = envcheck_mod.claude_status()
         auth_cache.update(t=now, v=v)
         return v
+    # --- saved conversations ---------------------------------------------------------------------------------------------------
+    def _chat_or_404(chat_id: str) -> dict:
+        try:
+            return hub.chats.meta(chat_id)
+        except chatstore_mod.ChatNotFound:
+            raise HTTPException(404, "no such chat")
+
+    @app.get("/api/chats")
+    def chats_list():
+        cur = hub.chat.chat_id if hub.chat is not None else None
+        return {"chats": hub.chats.list(), "current": cur}
+
+    @app.get("/api/chats/{chat_id}")
+    def chats_get(chat_id: str):
+        meta = _chat_or_404(chat_id)
+        return {"meta": meta, "events": hub.chats.events(chat_id)}
+
+    @app.post("/api/chats/{chat_id}/open")
+    async def chats_open(chat_id: str):
+        """Makes a saved chat the current conversation (the next message resumes it) and returns its events for display."""
+        meta = _chat_or_404(chat_id)
+        c = get_chat()
+        try:
+            await c.open_chat(chat_id)
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        return {"meta": meta, "events": hub.chats.events(chat_id)}
+
+    @app.patch("/api/chats/{chat_id}")
+    def chats_rename(chat_id: str, body: dict):
+        _chat_or_404(chat_id)
+        try:
+            return hub.chats.rename(chat_id, str(body.get("title", "")))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @app.delete("/api/chats/{chat_id}")
+    async def chats_delete(chat_id: str):
+        _chat_or_404(chat_id)
+        if hub.chat is not None and hub.chat.chat_id == chat_id:
+            if hub.chat.busy:
+                raise HTTPException(409, "this chat is answering: stop it first")
+            await hub.chat.close()
+            hub.chat = None
+        hub.chats.delete(chat_id)
+        return {"ok": True}
+
+    @app.get("/api/chats/{chat_id}/files/{name}")
+    def chats_file(chat_id: str, name: str):
+        from fastapi.responses import FileResponse
+        _chat_or_404(chat_id)
+        try:
+            p = hub.chats.file_path(chat_id, name)
+        except chatstore_mod.ChatNotFound:
+            raise HTTPException(404, "no such file")
+        kind = attach_mod.sniff_image(p.read_bytes()[:16])
+        # Only images are shown inline; anything else is offered as a download and never rendered as a page.
+        return FileResponse(p, media_type=kind or "application/octet-stream",
+                            headers={"Content-Disposition": ("inline" if kind else "attachment") + f"; filename=\"{p.name}\"",
+                                     "X-Content-Type-Options": "nosniff"})
+
+    @app.get("/api/chats/{chat_id}/export")
+    def chats_export(chat_id: str):
+        from fastapi.responses import PlainTextResponse
+        _chat_or_404(chat_id)
+        return PlainTextResponse(hub.chats.export_markdown(chat_id), headers={"Content-Disposition": f"attachment; filename=\"{chat_id}.md\""})
+
     @app.get("/api/chat/info")
     async def chat_info():
         """Is the chat usable (SDK installed, logged in) and with which settings. No model name is shown in the UI by default."""
@@ -550,12 +619,16 @@ def create_app(hub: Hub | None = None) -> FastAPI:
 
     @app.post("/api/chat")
     async def chat(req: ChatRequest):
+        if not req.text.strip() and not req.attachments:
+            raise HTTPException(422, "write a message or attach a file")
         c = get_chat()
         try:
-            c.start_turn(req.text, req.view)
+            c.start_turn(req.text, req.view, req.attachments)
+        except attach_mod.AttachmentError as e:
+            raise HTTPException(400, str(e))
         except RuntimeError as e:
             raise HTTPException(409, str(e))
-        return {"ok": True}
+        return {"ok": True, "chat_id": c.chat_id}
 
     @app.post("/api/chat/stop")
     async def chat_stop():
