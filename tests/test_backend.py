@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,9 @@ ROOT = Path(__file__).parents[1]
 
 
 def _target(name):
+    # Probe access can block inside libusb enumeration (seen while CubeIDE was open), so hardware tests are opt-in.
+    if not os.environ.get("RDT_HW_TESTS"):
+        pytest.skip("hardware test: set RDT_HW_TESTS=1 to run")
     t = load_targets()[name]
     elf = (ROOT / t["elf"]).resolve()
     if not elf.exists():
