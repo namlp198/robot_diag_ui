@@ -42,7 +42,10 @@ class Resolved:
 
 
 class SymbolTable:
-    def __init__(self, elf_path: str | Path):
+    def __init__(self, elf_path: str | Path, addr_from: str | Path | None = None):
+        """Types (and addresses) from `elf_path`. With `addr_from` (the ELF that is really flashed, e.g. a Release
+        build without DWARF) the addresses come from its .symtab and the types stay from `elf_path`; a variable
+        whose size differs between the two is refused, so a layout change cannot go unnoticed."""
         self.elf_path = Path(elf_path)
         self._fh = open(self.elf_path, "rb")
         self._elf = ELFFile(self._fh)
@@ -51,6 +54,8 @@ class SymbolTable:
         self._dwarf = self._elf.get_dwarf_info()
         self._vars: dict[str, tuple[object, int]] = {}
         self._index()
+        if addr_from is not None:
+            self._rebase(Path(addr_from))
 
     def close(self):
         self._fh.close()
@@ -64,6 +69,30 @@ class SymbolTable:
                 if addr is None:
                     continue
                 self._vars.setdefault(die.attributes["DW_AT_name"].value.decode(), (die, addr))
+
+    def _rebase(self, image_elf: Path):
+        found: dict[str, list[tuple[int, int]]] = {}
+        with open(image_elf, "rb") as fh:
+            tab = ELFFile(fh).get_section_by_name(".symtab")
+            if tab is None:
+                raise SymbolError(f"{image_elf}: no .symtab (stripped?)")
+            for sym in tab.iter_symbols():
+                if sym["st_info"]["type"] == "STT_OBJECT" and sym.name:
+                    found.setdefault(sym.name, []).append((sym["st_value"], sym["st_size"]))
+        rebased = {}
+        for name, (die, _old) in self._vars.items():
+            cands = set(found.get(name, []))
+            if len(cands) != 1:
+                continue  # absent in the flashed image, or ambiguous (same static name twice): not offered
+            addr, size = next(iter(cands))
+            try:
+                dsize = self._size(self._type_die(die))
+            except SymbolError:
+                continue
+            if size and dsize and size != dsize:
+                continue  # layout differs between the type ELF and the flashed image
+            rebased[name] = (die, addr)
+        self._vars = rebased
 
     @staticmethod
     def _static_address(loc) -> int | None:

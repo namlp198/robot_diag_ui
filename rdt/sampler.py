@@ -20,7 +20,8 @@ def to_cell(x):
 
 class Sampler(threading.Thread):
     def __init__(self, name: str, serial: str, elf: Path, paths: list[str], hz: float,
-                 sink: Sink, t0: float, on_error: Callable[[str, str], None] | None = None):
+                 sink: Sink, t0: float, on_error: Callable[[str, str], None] | None = None,
+                 image: Path | None = None):
         super().__init__(name=f"sampler-{name}", daemon=True)
         self.target = name
         self.serial = serial
@@ -33,8 +34,9 @@ class Sampler(threading.Thread):
         self.reads = 0
         self.failures = 0
         self.elf = Path(elf)
+        self.image = Path(image) if image else self.elf  # the ELF that is really flashed (may lack DWARF)
         self.fw: VerifyResult | None = None  # set after attach: does the board run this ELF?
-        st =SymbolTable(elf)
+        st = SymbolTable(elf, addr_from=image)
         try:
             self.vars: list[Resolved] = [st.resolve(p) for p in self.paths]
         finally:
@@ -47,7 +49,7 @@ class Sampler(threading.Thread):
         period = 1.0 / self.hz
         try:
             with Probe(self.serial) as probe:
-                self.fw = verify(probe.read, self.elf)
+                self.fw = verify(probe.read, self.image)
                 if not self.fw.ok:
                     self.on_error(self.target, self.fw.summary())
                 while not self.stop_event.is_set():

@@ -1,14 +1,17 @@
 # Targets for rdt. Probe serials from robot_diag_ui_chat_plan.md section 2.
-# "robot S02" / "remote S02" are still open (plan section 9, question 1).
+# Robot S02 = robot_s_rtos SFF-02; the remote is robot_rc_rtos SFF (user, 2026-11-12).
 targets:
   robot:
     mcu: STM32H755 (CM7)
     probe_serial: "002900213235510837333439"   # was 0030004A..., changed 2026-11-12 (user-confirmed)
-    elf: ../robot_att/CM7/Debug/robot_att_H7_CM7.elf
+    # Robot SFF-02 (repo robot_s_rtos). The board runs the SFF02_Release image (verified 16/16 flash chunks).
+    # Release has no DWARF: types come from the SFF02_Debug ELF, addresses from the Release .symtab.
+    elf: ../robot_s_rtos/CM7/SFF02_Debug/robot_s_rtos_H7_CM7.elf
+    image_elf: ../robot_s_rtos/CM7/SFF02_Release/robot_s_rtos_H7_CM7.elf
     log_port: null          # USART3 is shared with the E22 receive path: never open it
   remote:
     mcu: STM32F446
     probe_serial: "066CFF3833584B3043204649"   # was 0670FF51..., changed 2026-11-12 (user-confirmed)
-    elf: ../robot_rc_rtos/ATT_Debug/robot_rc_rtos.elf
+    elf: ../robot_rc_rtos/SFF_Debug/robot_rc_rtos.elf   # remote SFF (verified to match the flashed image)
     log_port: auto          # USART2 VCP, 115200
     log_baud: 115200

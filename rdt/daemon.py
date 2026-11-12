@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from .cli import ROOT, load_targets
+from .cli import ROOT, elf_paths, load_targets, open_symbols
 from .recorder import Recorder, list_sessions, open_session
 from .sampler import Sampler
 from .symbols import SymbolError, SymbolTable
@@ -113,8 +113,9 @@ class Hub:
             try:
                 for name, paths in req.watches.items():
                     t = self.targets[name]
-                    samplers.append(Sampler(name, t["probe_serial"], (ROOT / t["elf"]).resolve(), paths,
-                                            req.hz, self.on_sample, t0, self.on_error))
+                    elf, image = elf_paths(t)
+                    samplers.append(Sampler(name, t["probe_serial"], elf, paths, req.hz, self.on_sample, t0,
+                                            self.on_error, image=image))
                 for name in req.vcp:
                     readers.append(VcpReader(name, self.targets[name], self.on_log, t0, self.on_error))
             except (SymbolError, VcpError, OSError) as e:
@@ -144,7 +145,7 @@ class Hub:
                 raise HTTPException(409, "not running")
             if self.recorder:
                 raise HTTPException(409, "already recording")
-            info = {s.target: {"serial": s.serial, "elf": str((ROOT / self.targets[s.target]["elf"]).resolve()),
+            info = {s.target: {"serial": s.serial, "elf": str(s.image),
                                "paths": s.paths, "vars": s.vars} for s in self.samplers}
             self.sessions_dir.mkdir(exist_ok=True)
             self.recorder = Recorder(self.sessions_dir, info, label=label)
@@ -233,7 +234,7 @@ def create_app(hub: Hub | None = None) -> FastAPI:
     def symbols(target: str, q: str = "", limit: int = 50):
         if target not in hub.targets:
             raise HTTPException(404, "unknown target")
-        st = SymbolTable((ROOT / hub.targets[target]["elf"]).resolve())
+        st = open_symbols(hub.targets[target])
         try:
             names = [n for n in st.names() if q.lower() in n.lower()][:limit]
             out = []
@@ -249,7 +250,7 @@ def create_app(hub: Hub | None = None) -> FastAPI:
     def resolve(target: str, path: str):
         if target not in hub.targets:
             raise HTTPException(404, "unknown target")
-        st = SymbolTable((ROOT / hub.targets[target]["elf"]).resolve())
+        st = open_symbols(hub.targets[target])
         try:
             r = st.resolve(path)
         except SymbolError as e:
@@ -262,7 +263,7 @@ def create_app(hub: Hub | None = None) -> FastAPI:
     def members(target: str, path: str, limit: int = 256):
         if target not in hub.targets:
             raise HTTPException(404, "unknown target")
-        st = SymbolTable((ROOT / hub.targets[target]["elf"]).resolve())
+        st = open_symbols(hub.targets[target])
         try:
             return [{"path": r.path, "address": r.address, "size": r.size, "kind": r.kind, "type": r.type_name}
                     for r in st.members(path, limit)]

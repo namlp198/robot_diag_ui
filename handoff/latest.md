@@ -10,7 +10,9 @@
 
 ## Latest change
 
-- **FINDING (2026-11-12): neither board runs the firmware the sibling-repo ELFs were built from.** `rdt/verify.py` compares 16 flash chunks with the ELF: robot 16/16 differ (vector table differs; `s_lora_rx.control_frames` reads 115200, a UART baud, so the layout differs too), remote 15/16 differ (vector table shifted by 0x10, counters still plausible vs its VCP log). Robot-side values are NOT trustworthy until the matching ELF is found/rebuilt. The daemon runs the check on attach and the UI shows a red banner.
+- **RESOLVED (2026-11-12): which firmware is on the boards.** Robot = `robot_s_rtos` model SFF-02 (not `robot_att`); it runs the **SFF02_Release** image (16/16 flash chunks match the Release ELF from 2026-11-11 15:02). Remote = `robot_rc_rtos` **SFF_Debug** (16/16 match). `targets.yaml` now has `image_elf` for the robot: Release has no DWARF, so types come from the SFF02_Debug ELF and addresses from the Release `.symtab` (size mismatch drops the variable). With these, robot `s_lora_rx.parser.stats.frames` 59950 vs remote `s_tx.out.control_frames` 59975: consistent.
+- I rebuilt (headless CubeIDE 1.19.0, 0 errors 0 warnings) `robot_rc_rtos` ATT_Debug and `robot_s_rtos` SFF02_Debug in those repos' build folders. Nothing flashed, no source touched.
+- `rdt/verify.py` compares 16 flash chunks with the ELF at attach; the daemon shows a banner if they differ. Check it after any re-flash.
 - D2 UI (`ui/`, Vite 4 + Svelte 4 + uPlot, Node 17.9): signal path, LoRa link rate charts, flags, timeline (VCP log, flag changes, errors), record button, session replay from the same stores. Built into `ui/dist`, served by the daemon at `http://127.0.0.1:8765/`. Looked at live in the browser pane with both boards. `panels.js` lists the watched variables.
 
 - D1 done: daemon `rdt serve` (`rdt/daemon.py`, FastAPI, loopback only, Host/Origin check): `/api/status|watch|stop|record/start|record/stop|samples|log|symbols|resolve|sessions`, `/ws` live stream. No write endpoint. Verified live on both boards (watch robot+remote+remote VCP, record, stop). 13 tests pass.
@@ -35,4 +37,4 @@
 
 ## Next
 
-Get ELFs that match the flashed firmware (or rebuild + flash with the user's OK), then re-check the UI panels. Then D3 chat (needs spike S3), D4 analyzers.
+Review the signal-path variables against the SFF firmware (`ui/src/panels.js`; robot_s_rtos has its own kinematics/CAN variables), then D3 chat (spike S3 first), D4 analyzers.

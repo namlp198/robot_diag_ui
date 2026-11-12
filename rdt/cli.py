@@ -17,13 +17,24 @@ def load_targets(path: Path | None = None) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))["targets"]
 
 
+def elf_paths(cfg: dict) -> tuple[Path, Path | None]:
+    """(ELF with types, ELF really flashed or None). `image_elf` is for Release builds, which carry no DWARF."""
+    elf = (ROOT / cfg["elf"]).resolve()
+    image = (ROOT / cfg["image_elf"]).resolve() if cfg.get("image_elf") else None
+    return elf, image
+
+
+def open_symbols(cfg: dict) -> SymbolTable:
+    elf, image = elf_paths(cfg)
+    return SymbolTable(elf, addr_from=image)
+
+
 def cmd_resolve(args) -> int:
     targets = load_targets()
     if args.target not in targets:
         print(f"unknown target {args.target!r}; have: {', '.join(targets)}", file=sys.stderr)
         return 2
-    elf = (ROOT / targets[args.target]["elf"]).resolve()
-    st = SymbolTable(elf)
+    st = open_symbols(targets[args.target])
     try:
         r = st.resolve(args.path)
     except SymbolError as e:
@@ -45,7 +56,7 @@ def cmd_watch(args) -> int:
         print(f"unknown target {args.target!r}; have: {', '.join(targets)}", file=sys.stderr)
         return 2
     t = targets[args.target]
-    st = SymbolTable((ROOT / t["elf"]).resolve())
+    st = open_symbols(t)
     try:
         vars_ = [st.resolve(p) for p in args.paths]
     except SymbolError as e:
@@ -95,12 +106,13 @@ def cmd_record(args) -> int:
     try:
         for name, paths in by_target.items():
             t = targets[name]
-            elf = (ROOT / t["elf"]).resolve()
-            samplers.append(Sampler(name, t["probe_serial"], elf, paths, args.hz, lambda *a: None, t0))
+            elf, image = elf_paths(t)
+            samplers.append(Sampler(name, t["probe_serial"], elf, paths, args.hz, lambda *a: None, t0,
+                                    image=image))
     except SymbolError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    info = {s.target: {"serial": s.serial, "elf": str((ROOT / targets[s.target]["elf"]).resolve()),
+    info = {s.target: {"serial": s.serial, "elf": str(s.image),
                        "paths": s.paths, "vars": s.vars} for s in samplers}
     box: list = [None]  # the recorder, filled in below; readers are built first so bad input creates no session
     readers = []

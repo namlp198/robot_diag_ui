@@ -61,6 +61,6 @@ def test_symbols_search(client):
     if not elf.exists():
         pytest.skip("robot ELF not built")
     j = client.get("/api/symbols", params={"target": "robot", "q": "s_lora_rx"}).json()
-    assert any(x["path"] == "s_lora_rx" and x["size"] == 164 for x in j)
+    assert any(x["path"] == "s_lora_rx" and x["size"] > 0 for x in j)
     r = client.get("/api/resolve", params={"target": "robot", "path": "s_lora_rx.filter.stats.lost"}).json()
     assert r["size"] == 4

@@ -13,7 +13,8 @@ web UI, and an embedded Claude Code chat that sees the same data. Full design an
 - Done (D1): backend, sampler, recorder/replay (`sessions/`), remote VCP log, daemon `rdt serve`.
 - Not done: S3 Agent SDK, S4 SWO, UI (D2), chat (D3), analyzers (D4), scripts and flashing (D5).
 - Verified on hardware (2026-11-12): read-only SWD attach and 164 B reads on both boards while running.
-- Not verified: CM4 stays running during CM7 attach; the flashed firmware equals the ELF in the sibling repo.
+- Firmware identity (2026-11-12): robot = `robot_s_rtos` SFF-02, SFF02_Release image (types from SFF02_Debug ELF); remote = `robot_rc_rtos` SFF_Debug. Both verified by flash comparison (`rdt/verify.py`).
+- Not verified: CM4 stays running during CM7 attach.
 
 ## S1 numbers (reads/s of 164 B, target running; details in decision 0001)
 
