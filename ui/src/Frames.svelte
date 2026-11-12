@@ -1,6 +1,6 @@
 <script>
   // RCL frames sampled from the boards' buffers and decoded by the daemon (rdt/rcl.py).
-  import { frames, status } from './store.js';
+  import { frames, status, latest as live } from './store.js';
   import { t } from './i18n.js';
 
   const SOURCES = ['remote_tx', 'robot_rx', 'remote_rx'];
@@ -13,6 +13,25 @@
   $: shown = picked ?? latest.remote_tx ?? latest.robot_rx ?? latest.remote_rx;
   $: gap = latest.remote_tx && latest.robot_rx ? (latest.remote_tx.seq - latest.robot_rx.seq + 256) % 256 : null;
 
+  // Per source, SEQ steps between consecutive frames we saw: a step > 1 means frames we did not see (lost on air OR just
+  // not polled in time), so it is shown as "+n", not as an error.
+  $: missed = (() => {
+    const prev = {}, out = new Map();
+    for (const f of [...$frames].sort((a, b) => a.t - b.t)) {
+      const p = prev[f.source];
+      if (p !== undefined && f.type_name === p.type_name) { const d = (f.seq - p.seq + 256) % 256 - 1; if (d > 0 && d < 200) out.set(f, d); }
+      prev[f.source] = f;
+    }
+    return out;
+  })();
+  // The same counters the dashboard uses: what the parsers themselves counted (all frames, including the bad ones).
+  const COUNTERS = [
+    ['robot', 's_lora_rx.parser.stats.frames', 'frames'], ['robot', 's_lora_rx.parser.stats.crc_errors', 'crc'],
+    ['robot', 's_lora_rx.parser.stats.truncated', 'truncated'], ['robot', 's_lora_rx.filter.stats.lost', 'lost'],
+    ['robot', 's_lora_rx.filter.stats.duplicates', 'dup'], ['remote', 's_tx.out.control_frames', 'control tx'],
+    ['remote', 's_tx.out.tx_failures', 'tx fail'], ['remote', 's_link.frames_bad', 'rx bad'],
+  ];
+  $: counters = COUNTERS.map(([tg, p, label]) => ({ tg, label, v: $live[tg]?.[p]?.v }));
   const bytes = (hex) => hex.match(/../g) ?? [];
   const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, '0');
   function fieldOf(f, i) {
@@ -40,6 +59,10 @@
     {/each}
   </div>
   <div class="muted small">{gap === null ? $t('fr.noMatch') : $t('fr.match', { tx: latest.remote_tx.seq, rx: latest.robot_rx.seq, d: gap })}</div>
+  <div class="counters mono">
+    {#each counters as c}<span><span class="muted">{c.tg} {c.label}</span> <b class:bad={(c.label === 'crc' || c.label === 'lost' || c.label === 'truncated' || c.label === 'tx fail' || c.label === 'rx bad') && c.v > 0}>{c.v ?? '—'}</b></span>{/each}
+  </div>
+  <p class="muted small">{$t('fr.why')}</p>
 </div>
 
 <div class="card">
@@ -93,7 +116,7 @@
       <tbody>
         {#each rows as f}
           <tr class:cur={picked === f} class:badrow={!f.crc_ok} on:click={() => (picked = f)}>
-            <td>{f.t.toFixed(2)}</td><td>{$t('fr.src.' + f.source)}</td><td>{f.type_name}</td><td>{f.seq}</td>
+            <td>{f.t.toFixed(2)}</td><td>{$t('fr.src.' + f.source)}</td><td>{f.type_name}</td><td>{f.seq}{#if missed.get(f)} <span class="gapb" title={$t('fr.gapTip')}>+{missed.get(f)}</span>{/if}</td>
             <td>0x{f.link_id.toString(16).toUpperCase().padStart(4, '0')}</td><td>{f.size}</td><td>{f.crc_ok ? '✓' : '✕'}</td>
             <td class="hexcell">{bytes(f.hex).slice(0, 12).join(' ').toUpperCase()}{f.size > 12 ? ' …' : ''}</td>
           </tr>
@@ -137,4 +160,6 @@
   tbody tr { cursor: pointer; } tbody tr:hover, tr.cur { background: color-mix(in srgb, var(--accent2) 14%, transparent); }
   tr.badrow td { color: var(--bad); }
   .hexcell { color: var(--muted); }
+  .counters { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 12px; margin: 6px 0; }
+  .gapb { color: var(--warn); border: 1px solid var(--warn); border-radius: 99px; padding: 0 5px; font-size: 10px; }
 </style>

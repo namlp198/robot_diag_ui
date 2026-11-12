@@ -8,7 +8,8 @@
 </script>
 
 <div class="card">
-  <h2>{$t('find.title')}</h2>
+  <h2>{$t('find.title')} <span class="muted">({list.length})</span></h2>
+  <div class="scroll">
   {#each list as { f, x }}
     <div class="f {f.severity}">
       <div class="head"><b>{x.title}</b><span class="muted mono">{f.target} · {f.t0.toFixed(1)}–{f.t1.toFixed(1)} s</span></div>
@@ -19,9 +20,11 @@
   {:else}
     <div class="muted">{$t('find.none')}</div>
   {/each}
+  </div>
 </div>
 
 <style>
+  .scroll { max-height: 340px; overflow-y: auto; padding-right: 4px; }
   .f { border-left: 4px solid var(--idle); padding: 6px 10px; margin-bottom: 8px; background: var(--panel2); border-radius: 2px; }
   .f.error { border-color: var(--bad); }
   .f.warn { border-color: var(--warn); }
