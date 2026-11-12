@@ -6,7 +6,7 @@
 
 ## Machine / branch
 
-- Branch: `main`, remote `origin` = `https://github.com/namlp198/robot_diag_ui.git`. Changes are not committed.
+- Branch: `main`, remote `origin` = `https://github.com/namlp198/robot_diag_ui.git`. Committed locally, not pushed.
 
 ## Latest change
 
@@ -25,7 +25,7 @@
 - Hardware use was read-only (attach, no halt/reset/write). CM4 still running during CM7 attach was not checked.
 - The remote benchmark read `s_tx` (no `s_lora_rx` in that ELF). Field meaning of remote variables not reviewed.
 - Flashed firmware vs. sibling-repo ELF not compared.
-- `scripts/check.ps1`: OK (3 tests pass). `pyocd` is installed in `.venv` by hand, not yet listed in `pyproject.toml`.
+- `scripts/check.ps1`: OK (4 tests pass).
 
 ## Next
 
