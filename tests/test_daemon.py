@@ -56,6 +56,43 @@ def test_sessions_listing_and_traversal(client, tmp_path):
     assert client.get("/api/sessions/nope").status_code == 404
 
 
+def test_settings_roundtrip_and_validation(client, tmp_path):
+    j = client.get("/api/settings").json()
+    assert "claude-sonnet-5-5" in j["models"] and "high" in j["efforts"] and j["core_registers"]
+    r = client.put("/api/settings", json={"model": "claude-opus-5-5", "effort": "high"})
+    assert r.status_code == 200 and r.json()["settings"]["effort"] == "high"
+    assert client.put("/api/settings", json={"effort": "ultra"}).status_code == 400
+    assert (tmp_path / "settings.json").exists()
+
+
+def test_chat_info_does_not_need_a_conversation(client):
+    j = client.get("/api/chat/info").json()
+    assert "sdk" in j and "settings" in j and j["busy"] is False
+
+
+def test_expr_endpoint_checks_regions_without_a_probe(client):
+    r = client.put("/api/expr", json={"target": "robot", "items": [
+        {"id": "a", "text": "0x20000000", "type": "u32"}, {"id": "b", "text": "0x40011004"}, {"id": "c", "text": "0xE000ED28"}]})
+    items = {i["id"]: i for i in r.json()["items"]}
+    assert items["a"]["address"] == 0x20000000 and "peripheral" in items["b"]["error"] and items["c"]["address"] == 0xE000ED28
+    client.put("/api/settings", json={"allow_peripheral_reads": True})
+    r = client.get("/api/expr").json()
+    assert [i["id"] for i in r["items"]["robot"]] == ["a", "b", "c"]   # re-checked against the new policy
+    assert client.put("/api/expr", json={"target": "nope", "items": []}).status_code == 404
+
+
+def test_frames_endpoint_and_session_frames(client, tmp_path):
+    from rdt import rcl
+    body = bytes([0x10, 0x01, 0x34, 0x12, 5, 7]) + bytes([8, 128, 128, 255, 255, 255, 255])
+    f = rcl.SOF + body + rcl.crc16(body).to_bytes(2, "little")
+    v = Resolved("s_lora_rx.parser.buf", 0x20000000, 58, "array", "uint8_t")
+    with Recorder(tmp_path, {"robot": {"serial": "S", "elf": "x", "paths": ["s_lora_rx.parser.buf"], "vars": [v]}}) as r:
+        r.add_sample("robot", 0.5, [f.ljust(58, b"\0").hex()])   # the sampler stores bytes variables as hex
+    j = client.get(f"/api/sessions/{r.dir.name}/frames").json()
+    assert [(x["source"], x["seq"], x["type_name"]) for x in j["frames"]] == [("robot_rx", 5, "CONTROL")]
+    assert client.get("/api/frames").json()["frames"] == []
+
+
 def test_symbols_search(client):
     elf = (ROOT / load_targets()["robot"]["elf"]).resolve()
     if not elf.exists():

@@ -2,7 +2,20 @@
   import { afterUpdate } from 'svelte';
   import { chat, conn, sendChat, stopChat, resetChat, series } from './store.js';
   import { RATES } from './panels.js';
-  import { t } from './i18n.js';
+  import { onMount } from 'svelte';
+  import { t, lang, localizeError } from './i18n.js';
+
+  // Is the chat usable? (SDK installed, bundled Claude Code logged in) - not which model: that is in Settings.
+  let state = 'unknown';
+  async function check() {
+    try {
+      const j = await (await fetch('/api/chat/info')).json();
+      state = !j.sdk ? 'nosdk' : j.logged_in === false ? 'login' : j.logged_in ? 'ready' : 'unknown';
+    } catch { state = 'unknown'; }
+  }
+  onMount(check);
+  let wasBusy = false;
+  $: { if (wasBusy && !$chat.busy) check(); wasBusy = $chat.busy; }
 
   let text = '';
   let err = '';
@@ -32,7 +45,8 @@
 <aside class="card chat">
   <div class="top">
     <h2>{$t('chat.title')}</h2>
-    <span class="muted mono">{$chat.model ?? $t('chat.noModel')}{$chat.cost ? ` · $${$chat.cost.toFixed(3)}` : ''}</span>
+    <span class="pill {state}" title={state === 'login' ? $t('chat.loginTip') : ''}>{$t('chat.' + (state === 'ready' ? 'ready' : state === 'login' ? 'needLogin' : state === 'nosdk' ? 'noSdk' : 'unknown'))}</span>
+    {#if $chat.cost}<span class="muted mono">${$chat.cost.toFixed(3)}</span>{/if}
     <button on:click={resetChat} title={$t('chat.newTip')}>{$t('chat.new')}</button>
   </div>
   <div class="msgs" bind:this={box}>
@@ -57,7 +71,7 @@
       <div class="muted">{$t('chat.empty')}</div>
     {/each}
   </div>
-  {#if err}<div class="err small">{err}</div>{/if}
+  {#if err}<div class="err small">{localizeError(err, $lang)}</div>{/if}
   <div class="input">
     <textarea rows="2" bind:value={text} on:keydown={key} placeholder={$t('chat.placeholder')} disabled={$chat.busy}></textarea>
     {#if $chat.busy}<button class="danger" on:click={stopChat}>{$t('chat.stop')}</button>{:else}<button class="primary" on:click={send} disabled={!text.trim()}>{$t('chat.send')}</button>{/if}
@@ -81,4 +95,7 @@
   .input { display: flex; gap: 6px; }
   textarea { flex: 1; resize: none; font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
   .cursor { opacity: .6; }
+  .pill { font-size: 11px; border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; color: var(--muted); }
+  .pill.ready { color: var(--ok); border-color: var(--ok); }
+  .pill.login, .pill.nosdk { color: var(--bad); border-color: var(--bad); }
 </style>

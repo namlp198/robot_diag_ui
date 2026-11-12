@@ -100,6 +100,11 @@ def build_server(box: ToolBox):
     async def get_sweep(args):
         return _text(box.get_sweep(args.get("session")))
 
+    @tool("get_frames", "Recent RCL frames decoded from the boards' parser/TX buffers (source: remote_tx, robot_rx, remote_rx): header, SEQ, LINK_ID, CRC, payload fields and hex. Captured by polling, so some frames may be missing (look at SEQ gaps).",
+          {"type": "object", "properties": {"source": {"type": "string"}, "limit": {"type": "integer"}}})
+    async def get_frames(args):
+        return _text(box.get_frames(args.get("source", ""), args.get("limit", 20)))
+
     @tool("show_chart", "Show a chart in the user's UI. series items: {target, path, as: 'value'|'rate'}.",
           {"type": "object", "properties": {"series": {"type": "array", "items": {"type": "object"}},
                                             "from_s": {"type": "number"}, "to_s": {"type": "number"},
@@ -125,7 +130,7 @@ def build_server(box: ToolBox):
 
     return create_sdk_mcp_server("rdt", tools=[
         get_status, read_latest, get_series, get_log, find_symbols, members, list_sessions, session_summary,
-        get_findings, get_sweep, show_chart, annotate, highlight_range, get_view_context])
+        get_findings, get_sweep, get_frames, show_chart, annotate, highlight_range, get_view_context])
 
 
 async def can_use_tool(tool_name, tool_input, ctx):
@@ -135,20 +140,24 @@ async def can_use_tool(tool_name, tool_input, ctx):
     return PermissionResultDeny(message=f"{tool_name} is not available in the analysis profile", interrupt=False)
 
 
-def make_options(box: ToolBox, resume: str | None = None) -> ClaudeAgentOptions:
+def make_options(box: ToolBox, resume: str | None = None, settings=None) -> ClaudeAgentOptions:
+    """`settings`: rdt.settings.Store (model, effort, cost cap); the environment defaults apply without it."""
+    cur = settings.current if settings is not None else None
     return ClaudeAgentOptions(
-        model=MODEL, system_prompt=SYSTEM, tools=[], mcp_servers={"rdt": build_server(box)},
+        model=cur.model if cur else MODEL, system_prompt=SYSTEM, tools=[], mcp_servers={"rdt": build_server(box)},
         allowed_tools=[], can_use_tool=can_use_tool, setting_sources=[], max_turns=20,
-        max_budget_usd=MAX_BUDGET, include_partial_messages=True, resume=resume,
+        max_budget_usd=cur.max_usd if cur else MAX_BUDGET, include_partial_messages=True, resume=resume,
+        effort=cur.effort if cur else None,
     )
 
 
 class ChatSession:
     """One conversation. `emit(dict)` delivers events to the UI (WebSocket)."""
 
-    def __init__(self, box: ToolBox, emit: Callable[[dict], None]):
+    def __init__(self, box: ToolBox, emit: Callable[[dict], None], settings=None):
         self.box = box
         self.emit = emit
+        self.settings = settings
         self.session_id: str | None = None
         self._client: ClaudeSDKClient | None = None
         self._task: asyncio.Task | None = None
@@ -156,7 +165,7 @@ class ChatSession:
 
     async def _ensure(self) -> ClaudeSDKClient:
         if self._client is None:
-            c = ClaudeSDKClient(options=make_options(self.box, self.session_id))
+            c = ClaudeSDKClient(options=make_options(self.box, self.session_id, self.settings))
             await c.connect()
             self._client = c
         return self._client

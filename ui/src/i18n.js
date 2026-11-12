@@ -55,6 +55,34 @@ const D = {
     'ref.title': 'Tham khảo', 'ref.search': 'Tìm…', 'ref.docs': 'Bản Markdown: docs/REFERENCE.vi.md', 'ref.used': 'rdt dùng', 'ref.cols.var': 'Biến',
     'ref.safety': 'An toàn', 'ref.board': 'Board', 'ref.shown': 'Hiển thị ở', 'ref.copy': 'Chép', 'ref.noMatch': 'Không có mục khớp.', 'ref.loadFail': 'Không tải được tham khảo: {e}',
     'ref.safety.all': 'mọi mức',
+    'tl.kind.all': 'tất cả', 'tl.kind.log': 'log', 'tl.kind.flag': 'cờ', 'tl.kind.finding': 'chẩn đoán', 'tl.kind.note': 'ghi chú', 'tl.kind.error': 'lỗi',
+    'err.stopFirst': 'Hãy dừng đọc trước: thao tác này cần dùng riêng probe.', 'err.alreadyRunning': 'Đang đọc rồi; hãy dừng trước.', 'err.notRunning': 'Chưa bắt đầu đọc.',
+    'err.flashBusy': 'Đang nạp firmware.', 'err.local': 'Chỉ cho phép truy cập từ máy này.', 'err.fw': 'FIRMWARE KHÔNG KHỚP: {a}/{b} đoạn flash khác với ELF. Bạn đang xem biến theo ELF không phải là firmware đang chạy.',
+    'err.noSdk': 'Chat cần claude-agent-sdk (pip install -e .[chat]).',
+    'flash.check.image_allowed_for_target': 'File nằm trong danh sách cho phép', 'flash.check.image_inside_flash_range': 'Image nằm trong vùng flash của board',
+    'flash.check.probe_attached': 'Probe đã cắm', 'flash.check.board_dev_id': 'DEV_ID của board đúng',
+    'nav.frames': 'Gói tin', 'nav.expr': 'Live Expressions', 'nav.settings': 'Cài đặt',
+    'chat.ready': 'sẵn sàng', 'chat.needLogin': 'chưa đăng nhập', 'chat.noSdk': 'thiếu SDK', 'chat.unknown': 'chưa rõ trạng thái',
+    'chat.loginTip': 'Chạy một lần: .venv\\Lib\\site-packages\\claude_agent_sdk\\_bundled\\claude.exe auth login',
+    'fr.title': 'Gói tin RCL (frame đầy đủ)', 'fr.src.remote_tx': 'Remote gửi → robot', 'fr.src.robot_rx': 'Robot nhận', 'fr.src.remote_rx': 'Remote nhận (từ robot)',
+    'fr.none': 'chưa thấy frame', 'fr.needWatch': 'Bấm "Bắt đầu đọc": các bộ đệm frame được đọc cùng với các biến khác.',
+    'fr.match': 'Remote gửi tới SEQ {tx}, robot nhận tới SEQ {rx}: chênh {d} frame (có thể do chu kỳ đọc).', 'fr.noMatch': 'Chưa có đủ dữ liệu hai phía để so SEQ.',
+    'fr.history': 'Lịch sử frame', 'fr.filter': 'Nguồn', 'fr.all': 'tất cả', 'fr.inspect': 'Chi tiết frame', 'fr.pickRow': 'Chọn một frame ở bảng lịch sử hoặc một thẻ phía trên.',
+    'fr.cols': 'thời gian (s)|nguồn|loại|SEQ|LINK_ID|byte|CRC', 'fr.crcOk': 'CRC đúng', 'fr.crcBad': 'CRC sai', 'fr.copyHex': 'Chép hex', 'fr.copied': 'Đã chép',
+    'fr.note': 'Frame được lấy mẫu từ bộ đệm của board (bộ đệm gửi của remote, bộ đệm parser của robot và của remote), không phải bắt toàn bộ đường truyền: nếu tần số đọc thấp hơn tần số gửi thì có frame không được thấy (nhìn khoảng nhảy SEQ). Frame sai CRC không được hiển thị. Robot không có bộ đệm cho telemetry gửi đi nên chiều robot → remote chỉ xem ở phía remote nhận.',
+    'fr.payload': 'Nội dung', 'fr.field': 'Trường', 'fr.flags': 'Cờ', 'fr.slots': 'Slot', 'fr.records': 'Bản ghi telemetry', 'fr.tlv': 'TLV',
+    'ex.title': 'Live Expressions', 'ex.intro': 'Theo dõi biến theo tên hoặc địa chỉ bất kỳ, chỉ đọc (không ghi). Cần đang "Bắt đầu đọc"; giá trị cập nhật theo chu kỳ đọc.',
+    'ex.needWatch': 'Chưa đọc: bấm "Bắt đầu đọc" để thấy giá trị.', 'ex.target': 'Board', 'ex.expr': 'Biến hoặc địa chỉ', 'ex.exprPh': 's_lora_rx.filter.stats.lost hoặc 0xE000ED28',
+    'ex.type': 'Kiểu (địa chỉ)', 'ex.count': 'Số phần tử', 'ex.add': 'Thêm', 'ex.core': 'Thanh ghi lõi…', 'ex.format': 'Hiển thị', 'ex.fmt.auto': 'tự động', 'ex.fmt.dec': 'thập phân', 'ex.fmt.hex': 'hex', 'ex.fmt.bin': 'nhị phân',
+    'ex.cols': 'Board|Biểu thức|Địa chỉ|Kiểu|Giá trị|Đổi cách đây', 'ex.expand': 'Mở rộng', 'ex.remove': 'Xóa', 'ex.clear': 'Xóa tất cả', 'ex.empty': 'Chưa có biểu thức nào. Thêm một biến hoặc địa chỉ ở trên.',
+    'ex.periph': 'Đọc thanh ghi ngoại vi đang tắt (Cài đặt): đọc có thể xóa cờ hoặc lấy byte khỏi FIFO.', 'ex.readOnly': 'Chỉ đọc: Flash, SRAM và thanh ghi lõi Cortex-M luôn đọc được; thanh ghi ngoại vi cần bật trong Cài đặt.',
+    'ex.ago': '{s} s', 'ex.never': '—', 'ex.bits': 'bit',
+    'set.title': 'Cài đặt', 'set.chat': 'Chat Claude', 'set.model': 'Model', 'set.modelCustom': 'Model khác (nhập id)…', 'set.effort': 'Mức suy luận (effort)', 'set.effortDefault': 'mặc định của model',
+    'set.budget': 'Giới hạn chi phí mỗi cuộc trò chuyện (USD)', 'set.save': 'Lưu', 'set.saved': 'Đã lưu. Cuộc trò chuyện mới sẽ dùng cài đặt này.', 'set.savedRestart': 'Đã lưu và đã bắt đầu cuộc trò chuyện mới.',
+    'set.status': 'Trạng thái chat', 'set.statusReady': 'sẵn sàng (đã đăng nhập)', 'set.statusLogin': 'chưa đăng nhập: chạy lệnh auth login một lần', 'set.statusNoSdk': 'thiếu claude-agent-sdk', 'set.statusUnknown': 'chưa rõ',
+    'set.engineNote': 'Công cụ chat là Claude Agent SDK (chỉ có công cụ đọc và hiển thị của rdt; không ghi, reset hay nạp). Model và effort áp dụng từ cuộc trò chuyện kế tiếp.',
+    'set.reading': 'Đọc dữ liệu', 'set.periph': 'Cho phép Live Expressions đọc thanh ghi ngoại vi (0x4000_0000..0x5FFF_FFFF)', 'set.periphWarn': 'Đọc một thanh ghi trạng thái hoặc dữ liệu có thể xóa cờ hoặc lấy byte khỏi FIFO và làm firmware chạy khác đi. Mặc định tắt.',
+    'set.appearance': 'Giao diện', 'set.theme': 'Theme', 'set.themeDark': 'tối', 'set.themeLight': 'sáng', 'set.lang': 'Ngôn ngữ',
   },
   en: {
     'conn.live': 'daemon connected', 'conn.replay': 'replaying {name}', 'conn.offline': 'daemon not running (rdt serve)',
@@ -98,6 +126,34 @@ const D = {
     'ref.title': 'Reference', 'ref.search': 'Search…', 'ref.docs': 'Markdown copy: docs/REFERENCE.en.md', 'ref.used': 'used by rdt', 'ref.cols.var': 'Variable',
     'ref.safety': 'Safety', 'ref.board': 'Board', 'ref.shown': 'Shown in', 'ref.copy': 'Copy', 'ref.noMatch': 'No matching entries.', 'ref.loadFail': 'Could not load the reference: {e}',
     'ref.safety.all': 'all levels',
+    'tl.kind.all': 'all', 'tl.kind.log': 'log', 'tl.kind.flag': 'flag', 'tl.kind.finding': 'finding', 'tl.kind.note': 'note', 'tl.kind.error': 'error',
+    'err.stopFirst': 'Stop reading first: this needs the probe exclusively.', 'err.alreadyRunning': 'Already reading; stop first.', 'err.notRunning': 'Not reading yet.',
+    'err.flashBusy': 'A flash is in progress.', 'err.local': 'Local access only.', 'err.fw': 'FIRMWARE MISMATCH: {a}/{b} flash chunks differ from the ELF. The variables you see follow the ELF, not the firmware that is running.',
+    'err.noSdk': 'The chat needs claude-agent-sdk (pip install -e .[chat]).',
+    'flash.check.image_allowed_for_target': 'Image is on the allow-list', 'flash.check.image_inside_flash_range': 'Image is inside the board flash',
+    'flash.check.probe_attached': 'Probe attached', 'flash.check.board_dev_id': 'Board DEV_ID matches',
+    'nav.frames': 'Frames', 'nav.expr': 'Live Expressions', 'nav.settings': 'Settings',
+    'chat.ready': 'ready', 'chat.needLogin': 'not logged in', 'chat.noSdk': 'SDK missing', 'chat.unknown': 'status unknown',
+    'chat.loginTip': 'Run once: .venv\\Lib\\site-packages\\claude_agent_sdk\\_bundled\\claude.exe auth login',
+    'fr.title': 'RCL frames (full frame)', 'fr.src.remote_tx': 'Remote sends → robot', 'fr.src.robot_rx': 'Robot receives', 'fr.src.remote_rx': 'Remote receives (from robot)',
+    'fr.none': 'no frame seen yet', 'fr.needWatch': 'Press "Start reading": the frame buffers are read together with the other variables.',
+    'fr.match': 'Remote sent up to SEQ {tx}, robot received up to SEQ {rx}: {d} frame(s) apart (may be the poll period).', 'fr.noMatch': 'Not enough data from both sides to compare SEQ.',
+    'fr.history': 'Frame history', 'fr.filter': 'Source', 'fr.all': 'all', 'fr.inspect': 'Frame detail', 'fr.pickRow': 'Pick a frame from the history table or one of the cards above.',
+    'fr.cols': 'time (s)|source|type|SEQ|LINK_ID|bytes|CRC', 'fr.crcOk': 'CRC ok', 'fr.crcBad': 'CRC bad', 'fr.copyHex': 'Copy hex', 'fr.copied': 'Copied',
+    'fr.note': "Frames are sampled from the boards' buffers (the remote's send buffer and the parser buffers of the robot and the remote); this is not a capture of the whole line. If the poll rate is below the send rate some frames are never seen (look at SEQ jumps). Frames with a bad CRC are not shown. The robot keeps no buffer for the telemetry it sends, so the robot → remote direction is visible only on the remote's receive side.",
+    'fr.payload': 'Payload', 'fr.field': 'Field', 'fr.flags': 'Flags', 'fr.slots': 'Slots', 'fr.records': 'Telemetry records', 'fr.tlv': 'TLV',
+    'ex.title': 'Live Expressions', 'ex.intro': 'Watch variables by name or any address, read-only (never writes). Needs "Start reading"; values refresh at the read rate.',
+    'ex.needWatch': 'Not reading: press "Start reading" to see values.', 'ex.target': 'Board', 'ex.expr': 'Variable or address', 'ex.exprPh': 's_lora_rx.filter.stats.lost or 0xE000ED28',
+    'ex.type': 'Type (address)', 'ex.count': 'Elements', 'ex.add': 'Add', 'ex.core': 'Core register…', 'ex.format': 'Format', 'ex.fmt.auto': 'auto', 'ex.fmt.dec': 'decimal', 'ex.fmt.hex': 'hex', 'ex.fmt.bin': 'binary',
+    'ex.cols': 'Board|Expression|Address|Type|Value|Changed ago', 'ex.expand': 'Expand', 'ex.remove': 'Remove', 'ex.clear': 'Clear all', 'ex.empty': 'No expressions yet. Add a variable or an address above.',
+    'ex.periph': 'Reading peripheral registers is off (Settings): a read can clear a flag or take a byte out of a FIFO.', 'ex.readOnly': 'Read-only: flash, SRAM and the Cortex-M core registers are always readable; peripheral registers need to be enabled in Settings.',
+    'ex.ago': '{s} s', 'ex.never': '—', 'ex.bits': 'bits',
+    'set.title': 'Settings', 'set.chat': 'Claude chat', 'set.model': 'Model', 'set.modelCustom': 'Other model (enter id)…', 'set.effort': 'Reasoning effort', 'set.effortDefault': "the model's default",
+    'set.budget': 'Cost cap per conversation (USD)', 'set.save': 'Save', 'set.saved': 'Saved. A new conversation will use these settings.', 'set.savedRestart': 'Saved, and a new conversation was started.',
+    'set.status': 'Chat status', 'set.statusReady': 'ready (logged in)', 'set.statusLogin': 'not logged in: run the auth login command once', 'set.statusNoSdk': 'claude-agent-sdk is missing', 'set.statusUnknown': 'unknown',
+    'set.engineNote': "The chat engine is the Claude Agent SDK (only rdt's read and display tools: no write, reset or flash). Model and effort apply from the next conversation.",
+    'set.reading': 'Reading data', 'set.periph': 'Let Live Expressions read peripheral registers (0x4000_0000..0x5FFF_FFFF)', 'set.periphWarn': 'Reading a status or data register can clear a flag or take a byte out of a FIFO and change how the firmware behaves. Off by default.',
+    'set.appearance': 'Appearance', 'set.theme': 'Theme', 'set.themeDark': 'dark', 'set.themeLight': 'light', 'set.lang': 'Language',
   },
 };
 
@@ -126,6 +182,21 @@ export function findingText(f, l) {
   const e = F[f.id];
   if (l !== 'en' || !e) return { title: f.title, detail: f.detail, checks: f.checks ?? [] };
   return { title: typeof e.title === 'function' ? e.title(f) : e.title, detail: e.detail(f), checks: e.checks };
+}
+
+// Known server messages (HTTP errors, board check results) in the UI language; anything else is shown as it came.
+export function localizeError(msg, l) {
+  const T = (k, p) => fmt(D[l][k] ?? D.vi[k] ?? k, p);
+  const s = String(msg ?? '');
+  if (/stop reading first/i.test(s)) return T('err.stopFirst');
+  if (/already running/i.test(s)) return T('err.alreadyRunning');
+  if (/^not running/i.test(s)) return T('err.notRunning');
+  if (/flash is in progress/i.test(s)) return T('err.flashBusy');
+  if (/local access only/i.test(s)) return T('err.local');
+  if (/chat needs claude-agent-sdk/i.test(s)) return T('err.noSdk');
+  const m = /FIRMWARE MISMATCH: (\d+)\/(\d+)/.exec(s);
+  if (m) return T('err.fw', { a: m[1], b: m[2] });
+  return s;
 }
 
 function fmt(s, p) { return p ? s.replace(/\{(\w+)\}/g, (_m, k) => (p[k] ?? `{${k}}`)) : s; }

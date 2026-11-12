@@ -23,6 +23,10 @@ Variables read over SWD without stopping the cores. Names are resolved from the 
 | `s_link.frames_ok` | remote | link | Telemetry frames from the robot received correctly. |
 | `s_link.frames_bad` | remote | link | Telemetry frames from the robot received corrupted. |
 | `s_link.frames_lost` | remote | link | Telemetry frames from the robot detected as missing (sequence gaps). |
+| `s_tx.out.frame` | remote | frames | The last RCL frame the remote built for sending (58-byte buffer; `frame_len` says how many bytes are the frame). |
+| `s_tx.out.frame_len` | remote | frames | Length in bytes of the frame in `s_tx.out.frame`. |
+| `s_rx.parser.buf` | remote | frames | Byte buffer of the remote's receive parser; holds the last telemetry frame from the robot until the next one overwrites it. |
+| `s_lora_rx.parser.buf` | robot | frames | Byte buffer of the robot's receive parser; holds the last CONTROL frame from the remote until the next one overwrites it. |
 | `s_lora_rx.parser.stats.frames` | robot | signal,link | Frames the robot's LoRa parser decoded. |
 | `s_lora_rx.parser.stats.crc_errors` | robot | link | Frames dropped for a bad CRC (noise, wrong baud, remote not speaking RCL v1). |
 | `s_lora_rx.parser.stats.truncated` | robot | link | Frames cut short (remote sending slower than 500 ms or weak signal). |

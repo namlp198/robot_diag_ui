@@ -23,6 +23,10 @@ Các biến được đọc qua SWD mà không dừng core. Tên biến được
 | `s_link.frames_ok` | remote | link | Số frame telemetry từ robot nhận đúng. |
 | `s_link.frames_bad` | remote | link | Số frame telemetry từ robot bị hỏng. |
 | `s_link.frames_lost` | remote | link | Số frame telemetry từ robot bị mất (nhảy số thứ tự). |
+| `s_tx.out.frame` | remote | frames | Frame RCL cuối cùng remote đã dựng để gửi (bộ đệm 58 byte; `frame_len` cho biết frame dài bao nhiêu byte). |
+| `s_tx.out.frame_len` | remote | frames | Độ dài (byte) của frame trong `s_tx.out.frame`. |
+| `s_rx.parser.buf` | remote | frames | Bộ đệm byte của parser nhận ở remote; giữ frame telemetry cuối cùng từ robot cho tới khi frame sau ghi đè. |
+| `s_lora_rx.parser.buf` | robot | frames | Bộ đệm byte của parser nhận ở robot; giữ frame CONTROL cuối cùng từ remote cho tới khi frame sau ghi đè. |
 | `s_lora_rx.parser.stats.frames` | robot | signal,link | Số frame parser LoRa của robot giải mã được. |
 | `s_lora_rx.parser.stats.crc_errors` | robot | link | Số frame bị bỏ vì sai CRC (nhiễu, sai baud, remote không nói RCL v1). |
 | `s_lora_rx.parser.stats.truncated` | robot | link | Số frame bị cắt (remote gửi thưa hơn 500 ms hoặc sóng yếu). |

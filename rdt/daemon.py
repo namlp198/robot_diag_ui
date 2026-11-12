@@ -18,7 +18,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .cli import ROOT, elf_paths, load_targets, open_symbols
-from . import analyzers, cubecli as cubecli_mod, flash as flash_mod, reference as reference_mod, sweep as sweep_mod
+from . import (analyzers, cubecli as cubecli_mod, exprs as exprs_mod, flash as flash_mod, rcl as rcl_mod,
+               reference as reference_mod, settings as settings_mod, sweep as sweep_mod)
 from .recorder import Recorder, list_sessions, open_session
 from .sampler import Sampler
 from .symbols import SymbolError, SymbolTable
@@ -85,6 +86,13 @@ class Hub:
         self.findings: dict[tuple, dict] = {}  # live findings seen so far, keyed to avoid repeats
         self.chat = None  # ChatSession, created on first use (needs claude_agent_sdk)
         self.box = None
+        self.settings = settings_mod.Store(self.sessions_dir / "settings.json")
+        self.exprs: dict[str, list] = {}          # live expressions per target (rdt.exprs.Expr)
+        self.expr_specs: dict[str, list] = {}     # as sent by the UI (including refused ones)
+        self.expr_info: dict[str, list] = {}      # resolved info or error per spec
+        self.expr_latest: dict[str, dict] = {}    # target -> {"t": ..., "values": {id: value}}
+        self.frames: deque = deque(maxlen=600)    # decoded RCL frames seen in the boards' buffers (rdt.rcl)
+        self.capture: rcl_mod.FrameCapture | None = None
 
     # --- fan-out (called from sampler threads) -------------------------------------------------
     def _publish(self, msg: dict):
@@ -109,6 +117,53 @@ class Hub:
             if self.recorder:
                 self.recorder.add_sample(target, t, vals)
         self._publish({"type": "sample", "target": target, "t": round(t, 6), "values": vals})
+        cap = self.capture
+        if cap is not None:
+            for fr in cap.feed(target, t, vals):
+                with self.lock:
+                    self.frames.append(fr)
+                self._publish({"type": "frame", **fr})
+
+    def on_expr(self, target: str, t: float, values: dict):
+        with self.lock:
+            self.expr_latest[target] = {"t": round(t, 6), "values": values}
+        self._publish({"type": "expr", "target": target, "t": round(t, 6), "values": values})
+
+    def set_exprs(self, target: str, specs: list[dict]) -> list[dict]:
+        """Replace the live expressions of `target`. Returns one info dict per spec (with `error` for refused ones)."""
+        if target not in self.targets:
+            raise HTTPException(404, "unknown target")
+        if len(specs) > exprs_mod.MAX_EXPRS:
+            raise HTTPException(400, f"at most {exprs_mod.MAX_EXPRS} expressions per target")
+        cfg = self.targets[target]
+        allow = self.settings.current.allow_peripheral_reads
+        st = None
+        if any(not exprs_mod._NUM.match(str(s.get("text", "")).strip()) for s in specs):
+            try:
+                st = open_symbols(cfg)
+            except (SymbolError, OSError):
+                st = None
+        built, info = [], []
+        try:
+            for s in specs:
+                try:
+                    e = exprs_mod.build(target, cfg, s, st, allow)
+                    built.append(e)
+                    info.append(e.info())
+                except exprs_mod.ExprError as err:
+                    info.append({"id": str(s.get("id", "")), "text": str(s.get("text", "")), "error": str(err)})
+        finally:
+            if st is not None:
+                st.close()
+        with self.lock:
+            self.exprs[target] = built
+            self.expr_specs[target] = [dict(s) for s in specs]   # kept so a policy change can re-check refused ones
+            self.expr_info[target] = info
+            self.expr_latest.pop(target, None)
+            for sm in self.samplers:
+                if sm.target == target:
+                    sm.set_exprs(built)
+        return info
 
     def on_log(self, target: str, t: float, line: str):
         with self.lock:
@@ -147,11 +202,17 @@ class Hub:
                     readers.append(VcpReader(name, self.targets[name], self.on_log, t0, self.on_error))
             except (SymbolError, VcpError, OSError) as e:
                 raise HTTPException(400, str(e))
+            for sm in samplers:
+                sm.expr_sink = self.on_expr
+                sm.set_exprs(self.exprs.get(sm.target, []))
             self.t0 = t0
             self.samplers, self.readers = samplers, readers
             self.ring = {s.target: deque(maxlen=RING) for s in samplers}
             self.logs = {r.target: deque(maxlen=RING) for r in readers}
             self.columns = {s.target: s.paths for s in samplers}
+            self.capture = rcl_mod.FrameCapture(self.columns)
+            self.frames.clear()
+            self.expr_latest = {}
             self.findings = {}
             self.running = True
             for x in [*samplers, *readers]:
@@ -256,8 +317,101 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             except ImportError as e:
                 raise HTTPException(501, f"chat needs claude-agent-sdk: pip install -e .[chat] ({e})")
             hub.box = ToolBox(hub, ui=lambda m: hub._publish({"type": "ui", **m}))
-            hub.chat = ChatSession(hub.box, emit=hub._publish)
+            hub.chat = ChatSession(hub.box, emit=hub._publish, settings=hub.settings)
         return hub.chat
+
+    auth_cache: dict = {"t": 0.0, "v": None}
+
+    def auth_status() -> dict:
+        """Login state of the Claude Code bundled with the SDK (`claude auth status`), cached for 30 s."""
+        import json as _json
+        import subprocess
+        now = time.time()
+        if auth_cache["v"] is not None and now - auth_cache["t"] < 30:
+            return auth_cache["v"]
+        try:
+            import claude_agent_sdk
+        except ImportError:
+            v = {"sdk": False, "logged_in": None}
+        else:
+            exe = Path(claude_agent_sdk.__file__).parent / "_bundled" / "claude.exe"
+            v = {"sdk": True, "logged_in": None}
+            if exe.exists():
+                try:
+                    r = subprocess.run([str(exe), "auth", "status"], capture_output=True, text=True, timeout=15)
+                    v["logged_in"] = bool(_json.loads(r.stdout).get("loggedIn"))
+                except Exception:
+                    v["logged_in"] = None
+        auth_cache.update(t=now, v=v)
+        return v
+
+    @app.get("/api/chat/info")
+    async def chat_info():
+        """Is the chat usable (SDK installed, logged in) and with which settings. No model name is shown in the UI by default."""
+        a = await asyncio.to_thread(auth_status)
+        return {**a, "busy": bool(hub.chat and hub.chat.busy), "settings": hub.settings.current.to_dict()}
+
+    @app.get("/api/settings")
+    def get_settings():
+        return {"settings": hub.settings.current.to_dict(), "models": settings_mod.MODELS, "efforts": settings_mod.EFFORTS,
+                "core_registers": [{"name": n, "address": a, "type": t, "meaning": m} for n, a, t, m in exprs_mod.CORE_REGISTERS]}
+
+    @app.put("/api/settings")
+    async def put_settings(changes: dict):
+        try:
+            new = hub.settings.update(changes)
+        except settings_mod.SettingsError as e:
+            raise HTTPException(400, str(e))
+        applied = False
+        if hub.chat is not None and not hub.chat.busy:  # next question starts a fresh conversation with the new settings
+            await hub.chat.close()
+            hub.chat = None
+            applied = True
+        if "allow_peripheral_reads" in changes:  # re-check the expressions against the new policy
+            for tgt, specs in list(hub.expr_specs.items()):
+                hub.set_exprs(tgt, specs)
+        return {"settings": new.to_dict(), "chat_restarted": applied}
+
+    @app.get("/api/frames")
+    def frames(limit: int = 200, source: str = ""):
+        with hub.lock:
+            rows = [f for f in hub.frames if not source or f["source"] == source][-min(limit, 600):]
+        return {"frames": rows, "sources": rcl_mod.SOURCES}
+
+    @app.get("/api/sessions/{name}/frames")
+    def session_frames(name: str, limit: int = 600):
+        p = hub.sessions_dir / name
+        if "/" in name or "\\" in name or ".." in name or not (p / "meta.json").exists():
+            raise HTTPException(404, "no such session")
+        s = open_session(p)
+        cols = {}
+        data = {}
+        for tgt in s.targets:
+            try:
+                cols[tgt], data[tgt] = s.samples(tgt)
+            except OSError:
+                continue
+        cap = rcl_mod.FrameCapture({t: c[1:] for t, c in cols.items()})
+        out = []
+        for tgt, rows in data.items():
+            for row in rows:
+                out += cap.feed(tgt, row[0], row[1:])
+        out.sort(key=lambda f: f["t"])
+        return {"frames": out[-min(limit, 2000):], "sources": rcl_mod.SOURCES}
+
+    @app.get("/api/expr")
+    def get_exprs():
+        with hub.lock:
+            return {"items": {t: list(i) for t, i in hub.expr_info.items()}, "latest": dict(hub.expr_latest),
+                    "allow_peripheral_reads": hub.settings.current.allow_peripheral_reads}
+
+    @app.put("/api/expr")
+    def put_exprs(body: dict):
+        target = str(body.get("target", ""))
+        items = body.get("items", [])
+        if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
+            raise HTTPException(400, "items must be a list of objects")
+        return {"items": hub.set_exprs(target, items)}
 
     @app.post("/api/chat")
     async def chat(req: ChatRequest):

@@ -13,7 +13,10 @@
   import ClaudeCharts from './ClaudeCharts.svelte';
   import CubeCli from './CubeCli.svelte';
   import Reference from './Reference.svelte';
-  import { t, theme, lang, toggleTheme, toggleLang } from './i18n.js';
+  import Frames from './Frames.svelte';
+  import LiveExpr from './LiveExpr.svelte';
+  import Settings from './Settings.svelte';
+  import { t, theme, lang, toggleTheme, toggleLang, localizeError } from './i18n.js';
 
   let view = 'dashboard'; // dashboard | cli | reference (the dashboard stays mounted so its charts keep their state)
   let hz = 10;
@@ -69,16 +72,16 @@
   <button on:click={toggleTheme} title={$t('hdr.themeTip')} aria-label={$t('hdr.themeTip')}>{$theme === 'dark' ? '☾' : '☀'}</button>
 </header>
 <nav>
-  {#each ['dashboard', 'cli', 'reference'] as v}
+  {#each ['dashboard', 'frames', 'expr', 'cli', 'reference', 'settings'] as v}
     <button class:primary={view === v} on:click={() => (view = v)}>{$t('nav.' + v)}</button>
   {/each}
 </nav>
 
-{#if err}<div class="err">{err}</div>{/if}
+{#if err}<div class="err">{localizeError(err, $lang)}</div>{/if}
 {#each Object.entries($status.watches) as [name, w]}
-  {#if w.fw && !w.fw.ok}<div class="err"><b>{name}</b>: {w.fw.text}</div>{/if}
+  {#if w.fw && !w.fw.ok}<div class="err"><b>{name}</b>: {localizeError(w.fw.text, $lang)}</div>{/if}
 {/each}
-{#each $status.errors.filter((e) => !e.text.includes('FIRMWARE MISMATCH')).slice(-2) as e}<div class="err">{e.target}: {e.text}</div>{/each}
+{#each $status.errors.filter((e) => !e.text.includes('FIRMWARE MISMATCH')).slice(-2) as e}<div class="err">{e.target}: {localizeError(e.text, $lang)}</div>{/each}
 
 <div class="layout">
   <main class:hide={view !== 'dashboard'}>
@@ -91,8 +94,11 @@
     <div class="wide"><Timeline /></div>
     <div class="wide"><Flash /></div>
   </main>
+  {#if view === 'frames'}<main class="single stack"><Frames /></main>{/if}
+  {#if view === 'expr'}<main class="single"><LiveExpr /></main>{/if}
   {#if view === 'cli'}<main class="single"><CubeCli /></main>{/if}
   {#if view === 'reference'}<main class="single"><Reference /></main>{/if}
+  {#if view === 'settings'}<main class="single"><Settings /></main>{/if}
   <Chat />
 </div>
 
@@ -111,6 +117,7 @@
   .wide { grid-column: 1 / -1; }
   .hide { display: none; }
   .single { display: block; }
+  .single.stack { display: flex; flex-direction: column; gap: 12px; }
   nav { display: flex; gap: 6px; padding: 6px 14px; border-bottom: 1px solid var(--line); }
   header b { color: var(--accent); text-shadow: var(--glow-text); letter-spacing: .06em; }
 </style>

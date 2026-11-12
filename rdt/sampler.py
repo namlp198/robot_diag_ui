@@ -33,6 +33,9 @@ class Sampler(threading.Thread):
         self.stop_event = threading.Event()
         self.reads = 0
         self.failures = 0
+        self.expr_sink: Callable[[str, float, dict], None] | None = None  # live expressions: (target, t, {id: value})
+        self._exprs: list = []
+        self._expr_lock = threading.Lock()
         self.elf = Path(elf)
         self.image = Path(image) if image else self.elf  # the ELF that is really flashed (may lack DWARF)
         self.fw: VerifyResult | None = None  # set after attach: does the board run this ELF?
@@ -44,6 +47,24 @@ class Sampler(threading.Thread):
 
     def stop(self):
         self.stop_event.set()
+
+    def set_exprs(self, exprs: list):
+        """Live expressions (rdt.exprs.Expr) read on every tick, besides the watched variables."""
+        with self._expr_lock:
+            self._exprs = list(exprs)
+
+    def _read_exprs(self, probe, t: float):
+        with self._expr_lock:
+            ex = list(self._exprs)
+        if not ex or self.expr_sink is None:
+            return
+        res = {}
+        for e in ex:
+            try:
+                res[e.id] = e.decode(probe.read(e.address, e.size))
+            except Exception as err:  # a refused read must not stop the sampling of the watched variables
+                res[e.id] = {"error": str(err)[:200]}
+        self.expr_sink(self.target, t, res)
 
     def run(self):
         period = 1.0 / self.hz
@@ -62,6 +83,7 @@ class Sampler(threading.Thread):
                     else:
                         self.reads += 1
                         self.sink(self.target, tick - self.t0, vals)
+                    self._read_exprs(probe, tick - self.t0)
                     self.stop_event.wait(max(0.0, period - (time.perf_counter() - tick)))
         except BackendError as e:
             self.on_error(self.target, str(e))

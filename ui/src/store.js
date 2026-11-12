@@ -11,6 +11,8 @@ export const replayName = writable(null);
 export const chat = writable({ items: [], busy: false, model: null, cost: 0, sessionId: null });
 export const claudeCharts = writable([]); // { id, title, series: [{target,path,as}], from, to }
 export const highlights = writable([]);
+export const frames = writable([]); // decoded RCL frames (rdt/rcl.py), live or from a recorded session
+export const exprLatest = writable({}); // target -> { t, values: { id: value | { error } } } (live expressions)
 export const findings = writable([]); // analyzer findings, live or from a recorded session // { t0, t1, label }
 
 function chatEvent(m) {
@@ -108,9 +110,13 @@ function onMessage(ev) {
     if (mode === 'live') {
       const { type, ...f } = m;
       findings.update((a) => [...a, f]);
-      pushEvent({ t: f.t0, target: f.target, kind: 'finding', text: `${f.severity}: ${f.title}` });
+      pushEvent({ t: f.t0, target: f.target, kind: 'finding', text: `${f.severity}: ${f.title}`, finding: f }); // `finding`: the UI re-translates it
     }
   }
+  else if (m.type === 'frame') {
+    if (mode === 'live') { const { type, ...f } = m; frames.update((a) => (a.length >= 600 ? [...a.slice(-500), f] : [...a, f])); }
+  }
+  else if (m.type === 'expr') exprLatest.update((L) => ({ ...L, [m.target]: { t: m.t, values: m.values } }));
   else if (m.type === 'chat') chatEvent(m);
   else if (m.type === 'ui') uiCommand(m);
   else if (m.type === 'error') pushEvent({ t: m.t, target: m.target, kind: 'error', text: m.text });
@@ -152,6 +158,8 @@ export async function startWatch(watches, hz, vcp) {
   series.set({});
   events.set([]);
   findings.set([]);
+  frames.set([]);
+  exprLatest.set({});
   status.set(await post('/api/watch', { watches, hz, vcp }));
 }
 
@@ -209,8 +217,9 @@ export async function loadSession(name) {
   try {
     const fr = await (await fetch(`/api/sessions/${encodeURIComponent(name)}/findings`)).json();
     findings.set(fr.findings ?? []);
-    (fr.findings ?? []).forEach((f) => ev.push({ t: f.t0, target: f.target, kind: 'finding', text: `${f.severity}: ${f.title}` }));
+    (fr.findings ?? []).forEach((f) => ev.push({ t: f.t0, target: f.target, kind: 'finding', text: `${f.severity}: ${f.title}`, finding: f }));
   } catch { findings.set([]); }
+  try { frames.set((await (await fetch(`/api/sessions/${encodeURIComponent(name)}/frames`)).json()).frames ?? []); } catch { frames.set([]); }
   ev.sort((a, b) => a.t - b.t);
   latest.set(L);
   series.set(S);
@@ -226,5 +235,6 @@ export function backToLive() {
   series.set({});
   events.set([]);
   findings.set([]);
+  frames.set([]);
   refresh();
 }

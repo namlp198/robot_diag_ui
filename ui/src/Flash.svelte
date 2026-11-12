@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { status } from './store.js';
-  import { t } from './i18n.js';
+  import { t, lang, localizeError } from './i18n.js';
 
   let cands = {};
   let target = 'remote';
@@ -48,9 +48,9 @@
     <button on:click={dry} disabled={!stopped || !image || busy}>{$t('flash.dry')}</button>
     {#if !stopped}<span class="muted">{$t('flash.stopFirst')}</span>{/if}
   </div>
-  {#if err}<div class="bad">{err}</div>{/if}
+  {#if err}<div class="bad">{localizeError(err, $lang)}</div>{/if}
   {#if plan}
-    {#each plan.checks as c}<div class={c.ok ? 'ok' : 'bad'}>{c.ok ? '✓' : '✕'} {c.name}: {c.detail}</div>{/each}
+    {#each plan.checks as c}<div class={c.ok ? 'ok' : 'bad'}>{c.ok ? '✓' : '✕'} {$t('flash.check.' + c.name) === 'flash.check.' + c.name ? c.name : $t('flash.check.' + c.name)}: <span class="mono">{c.detail}</span></div>{/each}
     {#if plan.already_flashed}<div class="muted">{$t('flash.already')}</div>{/if}
     <div class="muted mono small">{plan.command.join(' ')}</div>
     {#if plan.ok}

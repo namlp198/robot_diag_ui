@@ -1,7 +1,7 @@
 <script>
   // Read-only STM32_Programmer_CLI runner (whitelist enforced by the daemon: rdt/cubecli.py).
   import { status } from './store.js';
-  import { t } from './i18n.js';
+  import { t, lang, localizeError } from './i18n.js';
 
   const CMDS = ['list', 'info', 'read32', 'ob_display'];
   let command = 'list';
@@ -54,7 +54,7 @@
     <button class="primary" on:click={() => call(false)} disabled={busy || !stopped}>{$t('cli.run')}</button>
   </div>
   <div class="muted small">{$t('cli.hint.' + command)}</div>
-  {#if err}<div class="bad">{err}</div>{/if}
+  {#if err}<div class="bad">{localizeError(err, $lang)}</div>{/if}
   {#if line}<div class="small muted">{$t('cli.exact')}</div><pre class="cmd">{line}</pre>{/if}
   {#if out}<div class="small muted">{$t('cli.output', { rc: out.returncode })}</div><pre class="out">{out.output}</pre>{/if}
 </div>
