@@ -1,6 +1,6 @@
 # 0003 Gated flashing and read-only sweep
 
-- Status: Accepted; the flash `run` path is **not verified on a board** (only the dry run was)
+- Status: Accepted; `run` verified on both boards on 2026-11-12 with same-image re-flashes (remote SFF_Debug, robot SFF02_Release), not yet with a new image
 - Date: 2026-11-12
 
 ## Sweep
