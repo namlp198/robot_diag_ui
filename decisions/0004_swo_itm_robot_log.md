@@ -1,6 +1,6 @@
 # 0004 SWO/ITM as a robot log source (spike S4)
 
-- Status: Open. Read-only part done 2026-11-12; the capture chain is **not verified** (needs a loopback test that writes debug registers).
+- Status: Open. Read-only part done 2026-11-12; the capture chain is **not verified** (first loopback on 2026-11-12 received no bytes; see "Loopback result").
 - Date: 2026-11-12
 
 ## Question
@@ -21,6 +21,13 @@ The robot has no usable VCP log (USART3 is shared with the E22 receive path). Ca
 
 Whether the Nucleo's SWO solder bridge connects PB3 to the ST-LINK on this board, and whether the ST-LINK V3 delivers bytes. `scripts/s4_swo_probe.py --loopback` tests exactly
 that without firmware: it enables ITM/TPIU (debug registers, volatile, restored afterwards), writes a test string to stimulus port 0 from the debugger, and reads it back over SWO.
+
+## Loopback result (2026-11-12, robot powered, wheels raised, user approved the register writes)
+
+`--loopback` ran with 200 MHz / 2 Mbaud (ACPR 99): **0 SWO bytes received**; all written registers were restored (state after equals state before).
+So the chain is not confirmed. Untested likely causes: `DBGMCU_CR` trace clock enables (TRACECLKEN, D1/D3 debug clocks) were left at 0 and the loopback does not set them;
+the SWO solder bridge (PB3 to ST-LINK) may be open; the ST-LINK SWO speed may not match 2 Mbaud. A retry that also writes `DBGMCU_CR` (volatile) and tries 1 Mbaud
+needs a new user approval. SWO is not needed for the current plan.
 
 ## Decision so far
 
