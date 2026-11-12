@@ -1,11 +1,10 @@
 # robot_diag_ui
 
-Diagnostic tool for the robot (`robot_att`, H755) and its remote (`robot_rc_rtos`, F446), read over
+Diagnostic tool for the robot (`robot_s_rtos` SFF-02 on an H755) and its remote (`robot_rc_rtos`, F446), read over
 two ST-LINK probes. A local daemon (`rdt`) owns the hardware; a web UI shows live data and
 charts; a Claude Code chat panel looks at the same data and can draw on the charts.
 
-Status: scaffold plus ELF symbol resolver. Spikes S1 (probe speed), S3 (Agent SDK), S4 (SWO) not
-run yet. Design: `docs/plan_chat_ui.md` (draft, 2026-11-11, no decisions yet).
+Status (2026-11-12): daemon, web UI, recorder, Claude chat, analyzers, sweep and gated flashing are built (decisions 0001-0003). Spike S4 (SWO) is not run. `handoff/latest.md` says what is verified on hardware.
 
 ## Layout
 
