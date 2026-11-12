@@ -54,7 +54,7 @@
     <div class="muted mono small">{plan.command.join(' ')}</div>
     {#if plan.ok}
       <div class="confirm">
-        {#if plan.needs_motors_safe}<label><input type="checkbox" bind:checked={safe} /> Bánh đã kê khỏi mặt đất và đã cắt nguồn động lực</label>{/if}
+        {#if plan.needs_motors_safe}<label><input type="checkbox" bind:checked={safe} /> Bánh đã kê khỏi mặt đất, tôi đứng cạnh robot và sẵn sàng tắt nguồn ngay</label>{/if}
         <div>Gõ đúng: <code>{plan.confirm}</code></div>
         <input bind:value={typed} placeholder={plan.confirm} />
         <button class="danger" on:click={go} disabled={busy || typed !== plan.confirm || (plan.needs_motors_safe && !safe)}>Nạp</button>

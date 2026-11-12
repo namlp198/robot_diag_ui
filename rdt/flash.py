@@ -4,7 +4,9 @@ Gates, all required for `run`:
   1. the plan has no failed check (probe present, board DEV_ID equals the target's, ELF image inside the target's
      flash range, image path matches the target's `allowed_images`, image still has the hash that was planned);
   2. the caller typed the exact `confirm` phrase of this plan ("FLASH <target> <sha8>"), shown to the user by the UI;
-  3. targets with `needs_motors_safe` (the robot) also need `motors_safe=True`: wheels off the ground / drive power cut;
+  3. targets with `needs_motors_safe` (the robot) also need `motors_safe=True`: the user's statement that the wheels are off the ground
+     and that they are at the robot and can cut its power at once (the robot's motor power comes with its supply, so power
+     cannot be cut while flashing);
   4. the daemon is not sampling (the probe is needed exclusively; the caller stops it first).
 Claude has no flash tool; its permission policy denies everything outside `mcp__rdt__*`, and none of those flashes.
 After programming, the flash content is compared with the image (rdt.verify) and the result is appended to
@@ -135,7 +137,7 @@ def run(p: FlashPlan, cfg: dict, confirm: str, motors_safe: bool, repo_root: Pat
     if confirm != p.confirm:
         raise FlashError(f"confirmation phrase must be exactly: {p.confirm}")
     if p.needs_motors_safe and not motors_safe:
-        raise FlashError(f"{p.target}: confirm the robot is safe (wheels off the ground, drive power cut) before flashing")
+        raise FlashError(f"{p.target}: confirm the robot is safe (wheels off the ground, you are at the robot and can cut its power at once) before flashing")
     if _sha256(Path(p.image)) != p.sha256:
         raise FlashError("image changed after it was planned; plan again")
     started = datetime.now(timezone.utc).isoformat(timespec="seconds")

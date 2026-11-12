@@ -16,7 +16,8 @@ Programming a board is the only write path in rdt. It lives in `rdt/flash.py`, r
 `/api/flash/run`) and, as a dry run only, from `rdt flash-plan`. Gates for `run`: a plan with no failed check (probe attached; board DEV_ID
 read over SWD equals the target's; ELF is 32-bit ARM with all segments inside the target's flash range; image path matches the target's
 `allowed_images` in `targets.yaml`; image hash unchanged since planned), the exact typed phrase `FLASH <target> <sha8>`, `motors_safe` for
-the robot (wheels off the ground, drive power cut), and a stopped daemon (the probe is needed exclusively). After programming, the flash is compared with the image
+the robot (the user states: wheels off the ground, at the robot, able to cut power at once; 2026-11-12 change: the robot's motor power is its main supply, which
+also powers the H755 Nucleo, so "power cut" is impossible while flashing), and a stopped daemon (the probe is needed exclusively). After programming, the flash is compared with the image
 (`rdt/verify.py`) and a record is appended to `sessions/flash_log.jsonl`. An unreadable board fails the plan (fail closed).
 
 Allowed images: robot `robot_s_rtos/CM7/SFF02_*/*.elf`, remote `robot_rc_rtos/SFF_*/*.elf`. So an `ATT_*` remote image or a `robot_att` image cannot
@@ -27,8 +28,7 @@ Claude has no flash tool, and its permission policy denies anything outside `mcp
 ## Not done
 
 Paired flashing (robot + remote with an `RCL_VERSION` check), CM4 images, .hex/.bin images, and a checked "reset after flash leaves the driver brake / DMKE
-safe" (plan section 6: unconfirmed, debug_guide section 10 item 6). Until that is confirmed on the bench, flash the robot only with wheels off the ground
-and drive power cut.
+safe" (plan section 6: unconfirmed, debug_guide section 10 item 6). robot_s_rtos decision 0007/0008: PC10 (driver disable/brake) powers up high and `task_motor` releases it only after startup; whether the pin is held during an MCU reset by hardware is not confirmed. Flash the robot only with wheels off the ground and someone at the robot.
 
 ## Verified
 
