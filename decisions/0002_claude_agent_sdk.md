@@ -1,4 +1,4 @@
-# 0002 Chat: Claude Agent SDK (Python) in the daemon
+﻿# 0002 Chat: Claude Agent SDK (Python) in the daemon
 
 - Status: Accepted, partly verified (see "Not verified")
 - Date: 2026-11-12
@@ -26,8 +26,17 @@ and exposes tools as an in-process MCP server (`rdt/agent_tools.py`). The CLI (o
   fix by the user: `.venv\Lib\site-packages\claude_agent_sdk\_bundled\claude.exe auth login`. The daemon never handles
   credentials; the UI shows this hint when it sees the error.
 
-## Not verified (needs the login above)
+## Verified (2026-11-12, after the one-time login)
 
-- A live turn with tool calls, the event order with streaming, `can_use_tool` denial of a non-rdt tool in a real turn,
-  and `resume` of a session. `scripts/s3_spike.py` covers these; the unit tests (`tests/test_agent_tools.py`) cover
-  the tools and the policy function without the network.
+- `scripts/s3_spike.py`: in-process tool call and result (turns=2, about $0.001 on haiku), a write tool reaches `can_use_tool` and is
+  denied (the model reports the refusal and does not retry), and `resume` of a session recalls the earlier tool result.
+  Stream order per turn: system init, message_start/content_block_*/message_stop deltas, AssistantMessage, rate-limit event,
+  UserMessage (tool result), second assistant message, ResultMessage.
+- In the UI with both boards running: the question "does the LoRa link lose packets?" ran get_status, get_view_context and two
+  get_series calls, drew a chart with show_chart, and answered with rates (about 20 frames/s, about 0.44 lost/s, about 2%),
+  and said which variables it had not checked. One turn cost $0.056 on claude-sonnet-5-5.
+
+## Not verified
+
+- A denied built-in tool (for example Bash) in a real turn: the policy function is unit-tested, but with `tools=[]` the model has no
+  built-in to call. Cancelling a turn with the Stop button while a tool runs.

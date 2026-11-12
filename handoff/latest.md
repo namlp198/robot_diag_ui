@@ -11,7 +11,7 @@
 ## Latest change
 
 - D3 built (2026-11-12): `rdt/agent_tools.py` (12 read/display tools, unit-tested), `rdt/claude_bridge.py` (Agent SDK 0.2.180, profile "analysis": no built-ins, only `mcp__rdt__*`, settings not loaded), `/api/chat|chat/stop|chat/reset`, UI `Chat.svelte` (messages, tool cards, cost) and `ClaudeCharts.svelte` (show_chart, highlight_range; annotate goes to the timeline). Decision 0002. 22 tests pass.
-- **Not verified: a live Claude turn.** The bundled CLI is not logged in ("Not logged in"); the user must run `.venv\Lib\site-packages\claude_agent_sdk\_bundled\claude.exe auth login` once. Then run `python -I scripts/s3_spike.py` (tool call, permission callback, resume) and ask a question in the UI with the boards running.
+- **S3 verified live (2026-11-12)**: spike passes (tool call, permission denial, resume); a UI question with both boards running drew a chart and gave a sound answer (`decisions/0002`). The Stop button during a tool call is not tested.
 
 - **RESOLVED (2026-11-12): which firmware is on the boards.** Robot = `robot_s_rtos` model SFF-02 (not `robot_att`); it runs the **SFF02_Release** image (16/16 flash chunks match the Release ELF from 2026-11-11 15:02). Remote = `robot_rc_rtos` **SFF_Debug** (16/16 match). `targets.yaml` now has `image_elf` for the robot: Release has no DWARF, so types come from the SFF02_Debug ELF and addresses from the Release `.symtab` (size mismatch drops the variable). With these, robot `s_lora_rx.parser.stats.frames` 59950 vs remote `s_tx.out.control_frames` 59975: consistent.
 - I rebuilt (headless CubeIDE 1.19.0, 0 errors 0 warnings) `robot_rc_rtos` ATT_Debug and `robot_s_rtos` SFF02_Debug in those repos' build folders. Nothing flashed, no source touched.
