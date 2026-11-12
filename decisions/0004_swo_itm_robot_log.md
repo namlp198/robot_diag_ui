@@ -29,6 +29,10 @@ So the chain is not confirmed. Untested likely causes: `DBGMCU_CR` trace clock e
 the SWO solder bridge (PB3 to ST-LINK) may be open; the ST-LINK SWO speed may not match 2 Mbaud. A retry that also writes `DBGMCU_CR` (volatile) and tries 1 Mbaud
 needs a new user approval. SWO is not needed for the current plan.
 
+Retry (same day, user approved): DBGMCU_CR |= 0x700000 (TRACECLKEN, D1/D3DBGCKEN) and 1 Mbaud (ACPR 199): **still 0 bytes**, registers restored.
+Remaining suspects: SB for SWO open on this Nucleo, or the ST-LINK/pyOCD SWO path (`swo_start` may need the probe's SWO mode, or the board's ST-LINK firmware may not support it).
+Not pursued further: SWO stays closed until `robot_s_rtos` wants an ITM log; then check the solder bridge first.
+
 ## Decision so far
 
 Keep named-variable reads (and later `diag_block_t`) as the robot data source. SWO is worth adopting only if the loopback works AND `robot_s_rtos` adopts an ITM log

@@ -36,10 +36,12 @@ def show(t):
 
 
 def loopback(sess, t, cpu_hz, baud):
-    saved = {k: t.read32(R[k]) for k in ("ITM_TER", "ITM_TCR", "ITM_TPR", "TPIU_ACPR", "TPIU_SPPR", "TPIU_FFCR")}
+    saved = {k: t.read32(R[k]) for k in ("ITM_TER", "ITM_TCR", "ITM_TPR", "TPIU_ACPR", "TPIU_SPPR", "TPIU_FFCR", "DBGMCU_CR")}
     probe = sess.probe
     got = bytearray()
     try:
+        # H7 DBGMCU_CR: TRACECLKEN (bit 20), D1DBGCKEN (21), D3DBGCKEN (22): trace clocks (volatile, restored below)
+        t.write32(R["DBGMCU_CR"], saved["DBGMCU_CR"] | (7 << 20))
         probe.swo_start(baud)                       # ST-LINK starts listening at `baud`
         t.write32(R["ITM_LAR"], 0xC5ACCE55)         # unlock ITM
         t.write32(R["TPIU_LAR"], 0xC5ACCE55)        # unlock TPIU (if it has a lock register)
@@ -73,7 +75,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--loopback", action="store_true")
     ap.add_argument("--cpu-hz", type=int, default=200_000_000)   # robot_s_rtos .ioc: SYSCLK 200 MHz
-    ap.add_argument("--baud", type=int, default=2_000_000)
+    ap.add_argument("--baud", type=int, default=1_000_000)
     a = ap.parse_args()
     cfg = load_targets()["robot"]
     sess = ConnectHelper.session_with_chosen_probe(unique_id=cfg["probe_serial"], connect_mode="attach", halt_on_connect=False,
