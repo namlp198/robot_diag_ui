@@ -4,7 +4,7 @@ import pytest
 
 pyocd = pytest.importorskip("pyocd")
 
-from rdt.backend import Probe, list_serials  # noqa: E402
+from rdt.backend import BackendError, Probe, list_serials  # noqa: E402
 from rdt.cli import load_targets  # noqa: E402
 from rdt.symbols import SymbolTable  # noqa: E402
 
@@ -26,5 +26,9 @@ def test_robot_read_matches_size():
     st = SymbolTable(elf)
     r = st.resolve("s_lora_rx")
     st.close()
-    with Probe(t["probe_serial"]) as p:
+    try:
+        p = Probe(t["probe_serial"]).open()
+    except BackendError as e:  # probe listed but the target is unpowered: skip, do not fail
+        pytest.skip(f"target not attachable: {e}")
+    with p:
         assert len(p.read(r.address, r.size)) == r.size
