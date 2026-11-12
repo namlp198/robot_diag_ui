@@ -8,8 +8,18 @@ if (-not (Test-Path $py)) { throw "No .venv. Run: python -m venv .venv; .venv\Sc
 if (-not (Test-Path (Join-Path $root "ui\dist\index.html"))) { Write-Warning "ui\dist is missing: run 'npm install; npm run build' in ui\ (the page will not load until then)" }
 $url = "http://127.0.0.1:$Port"
 
-# One daemon only: it owns the probes.
-try { Invoke-RestMethod "$url/api/status" -TimeoutSec 2 | Out-Null; $running = $true } catch { $running = $false }
+# One daemon only: it owns the probes. A running daemon older than the code on disk is stopped and restarted
+# (otherwise the new UI would talk to old endpoints and pages like Frames stay empty).
+try { $st = Invoke-RestMethod "$url/api/status" -TimeoutSec 2; $running = $true } catch { $running = $false }
+if ($running) {
+    $disk = [int][math]::Floor((Get-ChildItem (Join-Path $root "rdt\*.py") | ForEach-Object { ([DateTimeOffset]$_.LastWriteTimeUtc).ToUnixTimeSeconds() } | Measure-Object -Maximum).Maximum)
+    if (-not $st.code_stamp -or [math]::Abs($st.code_stamp - $disk) -gt 1) {
+        Write-Host "Daemon on port $Port is older than the code on disk: restarting it."
+        Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Seconds 1
+        $running = $false
+    }
+}
 $daemon = $null
 if (-not $running) {
     $daemon = Start-Process -FilePath $py -ArgumentList @("-I", "-m", "rdt.cli", "serve", "--port", $Port) -WorkingDirectory $root -PassThru -WindowStyle Minimized

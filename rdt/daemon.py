@@ -26,6 +26,9 @@ from .symbols import SymbolError, SymbolTable
 from .vcp import VcpError, VcpReader
 
 RING = 4000  # samples kept per target for late-joining clients
+# Newest modification time (whole seconds) of the daemon's own code when it started: scripts/start.ps1 compares it with the
+# files on disk and restarts a daemon that is older than the code (a stale daemon serves a new UI with old endpoints).
+CODE_STAMP = int(max(p.stat().st_mtime for p in Path(__file__).parent.glob("*.py")))
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]", "::1"}
 
 
@@ -264,6 +267,7 @@ class Hub:
     def status(self) -> dict:
         with self.lock:
             return {
+                "code_stamp": CODE_STAMP,
                 "running": self.running, "recording": self.recorder.dir.name if self.recorder else None,
                 "t_now": round(time.perf_counter() - self.t0, 3),
                 "targets": {n: {"mcu": t.get("mcu"), "probe_serial": t["probe_serial"],
