@@ -10,6 +10,10 @@
 
 ## Latest change
 
+- D4 (2026-11-12): `rdt/analyzers.py` rule engine from debug_guide 5.5 and task_history 122/133/147: remote restart, lost jump (not counted as loss), real loss % with bursts, robot not receiving vs remote not sending, CRC, truncated, connected flap, frames-but-not-connected (+LINK_ID hint), remote ESTOP, link_down, tx failures, sample gaps, VCP log patterns. Missing variables skip the rule (listed in `skipped`). Surfaces: `rdt analyze <session>`, `/api/findings`, `/api/sessions/{n}/findings`, live `finding` events every 2 s, UI "Chẩn đoán tự động" panel + timeline, Claude tool `get_findings`. Real 45 s session `d4real`: 1.2% real loss (11 lost / 870), consistent with the chat answer. 38 tests pass.
+- `diag_block_t` v1 DRAFT only: `outputs/claude_drafts/diag_block_spec.md` and decoder `rdt/diag_block.py` (+tests). Needs adoption and a decision in robot_s_rtos and robot_rc_rtos; no firmware edited.
+- Rules are tuned on one healthy-ish run and synthetic data; thresholds (1.5 s stall, 2 s not-connected, 3 flaps, 200 = restart jump) have not seen a real fault. The VCP regexes are guesses at log wording.
+
 - D3 built (2026-11-12): `rdt/agent_tools.py` (12 read/display tools, unit-tested), `rdt/claude_bridge.py` (Agent SDK 0.2.180, profile "analysis": no built-ins, only `mcp__rdt__*`, settings not loaded), `/api/chat|chat/stop|chat/reset`, UI `Chat.svelte` (messages, tool cards, cost) and `ClaudeCharts.svelte` (show_chart, highlight_range; annotate goes to the timeline). Decision 0002. 22 tests pass.
 - **S3 verified live (2026-11-12)**: spike passes (tool call, permission denial, resume); a UI question with both boards running drew a chart and gave a sound answer (`decisions/0002`). The Stop button during a tool call is not tested.
 

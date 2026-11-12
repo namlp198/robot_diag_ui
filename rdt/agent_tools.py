@@ -152,6 +152,17 @@ class ToolBox:
         res["elf_sha256"] = s.meta["targets"][target].get("elf_sha256")
         return res
 
+    def get_findings(self, session: str | None = None, last_s: float = 120.0) -> dict:
+        """Rule-based findings for the live run (last_s) or a recorded session. Rules and evidence are ours."""
+        from . import analyzers
+        if session:
+            if "/" in session or "\\" in session or ".." in session or not (self.hub.sessions_dir / session / "meta.json").exists():
+                return {"error": "no such session"}
+            return analyzers.analyze(analyzers.from_session(open_session(self.hub.sessions_dir / session)))
+        if not self.hub.ring:
+            return {"error": "not running; pass a session name or start reading"}
+        return analyzers.analyze(analyzers.from_hub(self.hub, last_s))
+
     # --- display tools (drive the UI) -------------------------------------------------------------
     def show_chart(self, series: list[dict], from_s: float | None = None, to_s: float | None = None,
                    title: str = "") -> dict:

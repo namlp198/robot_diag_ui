@@ -7,7 +7,7 @@
 <div class="card">
   <h2>5. Dòng thời gian</h2>
   <div class="bar">
-    {#each ['all', 'log', 'flag', 'error'] as f}
+    {#each ['all', 'log', 'flag', 'finding', 'note', 'error'] as f}
       <button class:primary={filter === f} on:click={() => (filter = f)}>{f}</button>
     {/each}
     <span class="muted">{$events.length} mục (log VCP remote, đổi cờ, lỗi đọc)</span>
@@ -30,4 +30,6 @@
   .text { white-space: pre-wrap; word-break: break-all; }
   .flag .text { color: var(--accent); }
   .error .text { color: var(--bad); }
+  .finding .text { color: #e08a00; font-weight: 600; }
+  .note .text { color: var(--ok); }
 </style>

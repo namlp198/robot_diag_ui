@@ -10,7 +10,8 @@ export const events = writable([]); // { t, target, kind, text }
 export const replayName = writable(null);
 export const chat = writable({ items: [], busy: false, model: null, cost: 0, sessionId: null });
 export const claudeCharts = writable([]); // { id, title, series: [{target,path,as}], from, to }
-export const highlights = writable([]); // { t0, t1, label }
+export const highlights = writable([]);
+export const findings = writable([]); // analyzer findings, live or from a recorded session // { t0, t1, label }
 
 function chatEvent(m) {
   chat.update((c) => {
@@ -103,6 +104,13 @@ function onMessage(ev) {
   if (m.type === 'hello') status.set(m.status);
   else if (m.type === 'sample') onSample(m);
   else if (m.type === 'log') pushEvent({ t: m.t, target: m.target, kind: 'log', text: m.line });
+  else if (m.type === 'finding') {
+    if (mode === 'live') {
+      const { type, ...f } = m;
+      findings.update((a) => [...a, f]);
+      pushEvent({ t: f.t0, target: f.target, kind: 'finding', text: `${f.severity}: ${f.title}` });
+    }
+  }
   else if (m.type === 'chat') chatEvent(m);
   else if (m.type === 'ui') uiCommand(m);
   else if (m.type === 'error') pushEvent({ t: m.t, target: m.target, kind: 'error', text: m.text });
@@ -143,6 +151,7 @@ export async function startWatch(watches, hz, vcp) {
   latest.set({});
   series.set({});
   events.set([]);
+  findings.set([]);
   status.set(await post('/api/watch', { watches, hz, vcp }));
 }
 
@@ -197,6 +206,11 @@ export async function loadSession(name) {
     (j.log ?? []).forEach((l) => ev.push({ t: l.t, target, kind: 'log', text: l.line }));
     (j.events ?? []).forEach((e) => ev.push({ t: e.t, target, kind: e.kind, text: e.text }));
   }
+  try {
+    const fr = await (await fetch(`/api/sessions/${encodeURIComponent(name)}/findings`)).json();
+    findings.set(fr.findings ?? []);
+    (fr.findings ?? []).forEach((f) => ev.push({ t: f.t0, target: f.target, kind: 'finding', text: `${f.severity}: ${f.title}` }));
+  } catch { findings.set([]); }
   ev.sort((a, b) => a.t - b.t);
   latest.set(L);
   series.set(S);
@@ -211,5 +225,6 @@ export function backToLive() {
   latest.set({});
   series.set({});
   events.set([]);
+  findings.set([]);
   refresh();
 }

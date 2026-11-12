@@ -7,6 +7,7 @@
   import Flags from './Flags.svelte';
   import Timeline from './Timeline.svelte';
   import Chat from './Chat.svelte';
+  import Findings from './Findings.svelte';
   import ClaudeCharts from './ClaudeCharts.svelte';
 
   let hz = 10;
@@ -69,6 +70,7 @@
 <div class="layout">
   <main>
     <div class="wide"><SignalPath /></div>
+    <div class="wide"><Findings /></div>
     <LinkPanel />
     <Flags />
     <div class="wide"><ClaudeCharts /></div>

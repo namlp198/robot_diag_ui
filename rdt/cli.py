@@ -195,7 +195,33 @@ def cmd_replay(args) -> int:
     return 0
 
 
+def cmd_analyze(args) -> int:
+    import json
+
+    from . import analyzers
+    from .recorder import open_session
+
+    path = Path(args.session)
+    if not path.exists():
+        path = ROOT / "sessions" / args.session
+    res = analyzers.analyze(analyzers.from_session(open_session(path)))
+    if args.json:
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+        return 0
+    print(f"session {path.name}: span {res['span_s'][0]:.1f}..{res['span_s'][1]:.1f} s, {len(res['findings'])} findings")
+    for f in res["findings"]:
+        print(f"[{f['severity']:5}] {f['target']:6} {f['t0']:7.2f}-{f['t1']:7.2f}  {f['title']}: {f['detail']}")
+        for c in f["checks"]:
+            print(f"          check: {c}")
+    if res["skipped"]:
+        print("skipped (variables not recorded):", ", ".join(f"{x['rule']}" for x in res["skipped"]))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):  # Vietnamese text must not crash a cp1252 console
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(prog="rdt")
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("resolve", help="resolve a variable path to address/size from the target ELF")
@@ -219,6 +245,10 @@ def main(argv: list[str] | None = None) -> int:
     sv = sub.add_parser("serve", help="run the daemon (HTTP + WebSocket on 127.0.0.1)")
     sv.add_argument("--port", type=int, default=8765)
     sv.set_defaults(fn=lambda a: __import__("rdt.daemon", fromlist=["serve"]).serve(port=a.port) or 0)
+    an = sub.add_parser("analyze", help="label a recorded session with rule-based findings")
+    an.add_argument("session")
+    an.add_argument("--json", action="store_true")
+    an.set_defaults(fn=cmd_analyze)
     rp = sub.add_parser("replay", help="list sessions, or summarise / dump one")
     rp.add_argument("session", nargs="?")
     rp.add_argument("--csv", action="store_true")

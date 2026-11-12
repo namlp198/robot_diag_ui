@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .cli import ROOT, elf_paths, load_targets, open_symbols
+from . import analyzers
 from .recorder import Recorder, list_sessions, open_session
 from .sampler import Sampler
 from .symbols import SymbolError, SymbolTable
@@ -65,6 +66,7 @@ class Hub:
         self.recorder: Recorder | None = None
         self.t0 = time.perf_counter()
         self.running = False
+        self.findings: dict[tuple, dict] = {}  # live findings seen so far, keyed to avoid repeats
         self.chat = None  # ChatSession, created on first use (needs claude_agent_sdk)
         self.box = None
 
@@ -132,6 +134,7 @@ class Hub:
             self.ring = {s.target: deque(maxlen=RING) for s in samplers}
             self.logs = {r.target: deque(maxlen=RING) for r in readers}
             self.columns = {s.target: s.paths for s in samplers}
+            self.findings = {}
             self.running = True
             for x in [*samplers, *readers]:
                 x.start()
@@ -166,6 +169,19 @@ class Hub:
             return rec.dir.name
         return None
 
+    def analyze_live(self, last_s: float = 120.0) -> dict:
+        res = analyzers.analyze(analyzers.from_hub(self, last_s))
+        fresh = []
+        with self.lock:
+            for f in res["findings"]:
+                key = (f["id"], f["target"], round(f["t0"], 1))
+                if key not in self.findings:
+                    self.findings[key] = f
+                    fresh.append(f)
+        for f in fresh:
+            self._publish({"type": "finding", **f})
+        return res
+
     def status(self) -> dict:
         with self.lock:
             return {
@@ -186,7 +202,19 @@ def create_app(hub: Hub | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app):
         hub.loop = asyncio.get_running_loop()
+
+        async def analyze_loop():
+            while True:
+                await asyncio.sleep(2.0)
+                if hub.running and hub.ring:
+                    try:
+                        await asyncio.to_thread(hub.analyze_live)
+                    except Exception as e:  # an analyzer bug must not stop the daemon
+                        hub.on_error("daemon", f"analyzer failed: {e}")
+
+        task = asyncio.create_task(analyze_loop())
         yield
+        task.cancel()
         if hub.chat is not None:
             await hub.chat.close()
         hub.stop()
@@ -300,6 +328,19 @@ def create_app(hub: Hub | None = None) -> FastAPI:
         finally:
             st.close()
         return {"path": r.path, "address": r.address, "size": r.size, "kind": r.kind, "type": r.type_name}
+
+    @app.get("/api/findings")
+    def findings(last_s: float = 120.0):
+        if not hub.ring:
+            raise HTTPException(409, "not running")
+        return hub.analyze_live(last_s)
+
+    @app.get("/api/sessions/{name}/findings")
+    def session_findings(name: str):
+        p = hub.sessions_dir / name
+        if "/" in name or "\\" in name or ".." in name or not (p / "meta.json").exists():
+            raise HTTPException(404, "no such session")
+        return analyzers.analyze(analyzers.from_session(open_session(p)))
 
     @app.get("/api/members")
     def members(target: str, path: str, limit: int = 256):
