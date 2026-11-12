@@ -1,0 +1,19 @@
+{
+  "name": "robot-diag-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "2.5.3",
+    "svelte": "4.2.19",
+    "vite": "4.5.5"
+  },
+  "dependencies": {
+    "uplot": "1.6.31"
+  }
+}

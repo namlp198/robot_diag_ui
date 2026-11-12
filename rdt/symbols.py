@@ -136,7 +136,7 @@ class SymbolTable:
         return "bytes"
 
     # --- public ---------------------------------------------------------
-    def resolve(self, path: str) -> Resolved:
+    def _locate(self, path: str):
         tokens = list(_TOKEN.finditer(path))
         if not tokens or "".join(m.group(0) for m in tokens) != path:
             raise SymbolError(f"bad path syntax: {path!r}")
@@ -172,4 +172,25 @@ class SymbolTable:
                 elem = self._type_die(base)
                 addr += int(idx) * self._size(elem)
                 t = elem
+        return t, addr
+
+    def resolve(self, path: str) -> Resolved:
+        t, addr = self._locate(path)
         return Resolved(path, addr, self._size(t), self._kind(t), self._type_name(t))
+
+    def members(self, path: str, max_items: int = 256) -> list[Resolved]:
+        """One level below `path`: struct members, or array elements (capped). Empty for scalars."""
+        t, _ = self._locate(path)
+        base = self._strip(t)
+        out: list[Resolved] = []
+        if base is not None and base.tag in _STRUCTS:
+            for m in base.iter_children():
+                if m.tag == "DW_TAG_member" and "DW_AT_name" in m.attributes                         and "DW_AT_bit_size" not in m.attributes:
+                    try:
+                        out.append(self.resolve(f"{path}.{m.attributes['DW_AT_name'].value.decode()}"))
+                    except SymbolError:
+                        pass
+        elif base is not None and base.tag == "DW_TAG_array_type":
+            for i in range(min(self._array_len(base), max_items)):
+                out.append(self.resolve(f"{path}[{i}]"))
+        return out

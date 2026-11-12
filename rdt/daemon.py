@@ -14,6 +14,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .cli import ROOT, load_targets
@@ -165,7 +166,8 @@ class Hub:
                 "targets": {n: {"mcu": t.get("mcu"), "probe_serial": t["probe_serial"],
                                 "has_vcp": bool(t.get("log_port"))} for n, t in self.targets.items()},
                 "watches": {s.target: {"paths": s.paths, "hz": s.hz, "reads": s.reads, "failures": s.failures,
-                                       "alive": s.is_alive()} for s in self.samplers},
+                                       "alive": s.is_alive(),
+                                       "fw": None if s.fw is None else {"ok": s.fw.ok, "text": s.fw.summary()}} for s in self.samplers},
                 "vcp": {r.target: {"port": r.port, "lines": r.lines, "alive": r.is_alive()} for r in self.readers},
                 "errors": list(self.errors)[-10:],
             }
@@ -256,6 +258,19 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             st.close()
         return {"path": r.path, "address": r.address, "size": r.size, "kind": r.kind, "type": r.type_name}
 
+    @app.get("/api/members")
+    def members(target: str, path: str, limit: int = 256):
+        if target not in hub.targets:
+            raise HTTPException(404, "unknown target")
+        st = SymbolTable((ROOT / hub.targets[target]["elf"]).resolve())
+        try:
+            return [{"path": r.path, "address": r.address, "size": r.size, "kind": r.kind, "type": r.type_name}
+                    for r in st.members(path, limit)]
+        except SymbolError as e:
+            raise HTTPException(400, str(e))
+        finally:
+            st.close()
+
     @app.get("/api/sessions")
     def sessions():
         return [p.name for p in list_sessions(hub.sessions_dir)]
@@ -294,6 +309,9 @@ def create_app(hub: Hub | None = None) -> FastAPI:
         finally:
             hub.subs.discard(q)
 
+    dist = ROOT / "ui" / "dist"
+    if dist.is_dir():  # built UI (npm run build in ui/); API and /ws routes above take precedence
+        app.mount("/", StaticFiles(directory=dist, html=True), name="ui")
     return app
 
 

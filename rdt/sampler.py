@@ -8,6 +8,7 @@ from typing import Callable
 
 from .backend import BackendError, Probe
 from .symbols import Resolved, SymbolTable
+from .verify import VerifyResult, verify
 
 Sink = Callable[[str, float, list], None]  # (target, t_seconds_since_t0, values)
 
@@ -31,7 +32,9 @@ class Sampler(threading.Thread):
         self.stop_event = threading.Event()
         self.reads = 0
         self.failures = 0
-        st = SymbolTable(elf)
+        self.elf = Path(elf)
+        self.fw: VerifyResult | None = None  # set after attach: does the board run this ELF?
+        st =SymbolTable(elf)
         try:
             self.vars: list[Resolved] = [st.resolve(p) for p in self.paths]
         finally:
@@ -44,6 +47,9 @@ class Sampler(threading.Thread):
         period = 1.0 / self.hz
         try:
             with Probe(self.serial) as probe:
+                self.fw = verify(probe.read, self.elf)
+                if not self.fw.ok:
+                    self.on_error(self.target, self.fw.summary())
                 while not self.stop_event.is_set():
                     tick = time.perf_counter()
                     try:

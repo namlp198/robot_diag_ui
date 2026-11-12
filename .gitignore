@@ -4,3 +4,5 @@ __pycache__/
 sessions/
 outputs/temporary/*
 !outputs/temporary/.gitkeep
+node_modules/
+ui/dist/

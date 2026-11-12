@@ -51,7 +51,9 @@ def test_sessions_listing_and_traversal(client, tmp_path):
     assert client.get("/api/sessions").json() == [name]
     j = client.get(f"/api/sessions/{name}", params={"target": "robot"}).json()
     assert j["columns"] == ["t_s", "a"] and j["rows"] == [[0.0, 7]]
-    assert client.get("/api/sessions/..%2f..").status_code == 404
+    r = client.get("/api/sessions/..%2f..")  # may fall through to the static UI (200 HTML) but never to a session
+    assert r.status_code == 404 or "application/json" not in r.headers.get("content-type", "")
+    assert client.get("/api/sessions/nope").status_code == 404
 
 
 def test_symbols_search(client):
