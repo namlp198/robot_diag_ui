@@ -100,7 +100,7 @@ def test_file_dialog_runs_a_separate_process_and_parses_its_answer():
         return subprocess.CompletedProcess(args, 0, 'noise\n{"path": "C:/x/app.hex"}\n', "")
 
     assert envcheck.pick_file("firmware", None, runner) == {"path": "C:/x/app.hex"}
-    assert seen[0][1] == "-I" and seen[0][3:5] == ["firmware", ""]
+    assert seen[0][1:3] == ["-I", "-c"] and seen[0][4:6] == ["firmware", ""]
     assert envcheck.pick_file("rm -rf", None, runner)["path"] is None and len(seen) == 1   # unknown kind: no process
     bad = lambda a, **k: subprocess.CompletedProcess(a, 1, "", "Traceback")  # noqa: E731
     assert envcheck.pick_file("elf", None, bad)["path"] is None
