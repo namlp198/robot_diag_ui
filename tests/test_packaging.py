@@ -64,3 +64,20 @@ def test_launcher_defaults_to_the_native_window(monkeypatch):
 def test_built_exe_folder_has_the_bundled_pieces():
     d = ROOT / "dist" / "RobotDiag"
     assert (d / "_internal" / "ui" / "dist" / "index.html").exists() and (d / "_internal" / "targets.yaml").exists()
+
+
+def test_build_guide_matches_pinned_versions_and_real_files():
+    import tomllib
+    ps = (ROOT / "scripts" / "toolchain.psd1").read_text(encoding="utf-8")
+    pins = dict(re.findall(r"^\s*(\w+)\s*=\s*'([^']*)'", ps, re.M))
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["optional-dependencies"]
+    assert f"pyocd=={pins['PyOCD']}" in pyproject["probe"] and f"pywebview=={pins['PyWebView']}" in pyproject["app"]
+    assert f"claude-agent-sdk=={pins['AgentSdk']}" in pyproject["chat"]
+    for lang in ("vi", "en"):
+        doc = (ROOT / "docs" / f"BUILD_DEPLOY.{lang}.md").read_text(encoding="utf-8")
+        for key in ("PyOCD", "PyWebView", "AgentSdk", "PyInstaller", "CubeProgrammerVersion"):
+            assert pins[key] in doc, f"BUILD_DEPLOY.{lang}.md does not mention {key} {pins[key]}"
+        for name in set(re.findall(r"scripts\\([\w.]+\.(?:ps1|py|spec|iss|ico|psd1))", doc)):
+            assert (ROOT / "scripts" / name).exists(), f"BUILD_DEPLOY.{lang}.md names scripts\\{name}, which does not exist"
+        for opt in re.findall(r"`(-(?:SkipUi|SkipBuild|NoSmoke|NoInstaller|Edge|Browser))`", doc):
+            assert opt in (ROOT / "scripts" / ("build_exe.ps1" if opt in ("-SkipUi", "-SkipBuild", "-NoSmoke", "-NoInstaller") else "start.ps1")).read_text(encoding="utf-8")

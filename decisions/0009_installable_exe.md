@@ -15,6 +15,8 @@
 - The file dialog is a PowerShell WinForms dialog (not tkinter, and not a child of `sys.executable`, which is the app itself in the exe).
 - Version: `rdt.__version__` equals the `pyproject.toml` version (a test checks it); the installer takes it from there.
 
+- Pins added for packaging: PyInstaller 6.22.3 and Inno Setup 6 in `scripts\toolchain.psd1`. The step-by-step guide is `docs/BUILD_DEPLOY.{vi,en}.md`; a test keeps its versions, script names and option names in line with the repository.
+
 ## Consequences
 
 - Release steps: bump the version in both places, run `scripts/build_exe.ps1`, keep `dist\installer\...` out of git (`/dist/`, `/build/` are ignored).

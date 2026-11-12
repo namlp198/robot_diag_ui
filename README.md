@@ -63,6 +63,9 @@ Optional env: `RDT_CHAT_MODEL`, `RDT_CHAT_MAX_USD` (chat cost cap, default 2.0).
 
 ## Installable app (.exe)
 
+Full guide (setup, run, build, installer, deployment checklist, release steps, troubleshooting): [docs/BUILD_DEPLOY.en.md](docs/BUILD_DEPLOY.en.md)
+(Vietnamese: [docs/BUILD_DEPLOY.vi.md](docs/BUILD_DEPLOY.vi.md)).
+
 ```powershell
 .venv\Scripts\python -m pip install -e .[daemon,probe,chat,app] pyinstaller==6.22.3   # once
 .\scripts\build_exe.ps1            # UI -> PyInstaller -> smoke test -> Inno Setup
