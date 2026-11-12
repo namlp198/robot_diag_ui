@@ -3,12 +3,12 @@
 targets:
   robot:
     mcu: STM32H755 (CM7)
-    probe_serial: "0030004A3235510837333439"
+    probe_serial: "002900213235510837333439"   # was 0030004A..., changed 2026-11-12 (user-confirmed)
     elf: ../robot_att/CM7/Debug/robot_att_H7_CM7.elf
     log_port: null          # USART3 is shared with the E22 receive path: never open it
   remote:
     mcu: STM32F446
-    probe_serial: "0670FF514988525067182431"
+    probe_serial: "066CFF3833584B3043204649"   # was 0670FF51..., changed 2026-11-12 (user-confirmed)
     elf: ../robot_rc_rtos/ATT_Debug/robot_rc_rtos.elf
     log_port: auto          # USART2 VCP, 115200
     log_baud: 115200
