@@ -163,6 +163,17 @@ class ToolBox:
             return {"error": "not running; pass a session name or start reading"}
         return analyzers.analyze(analyzers.from_hub(self.hub, last_s))
 
+    def get_sweep(self, session: str | None = None) -> dict:
+        """Loss-against-rate table of a Phase 0 sweep (remote on the sweep build), live or from a recorded session."""
+        from . import analyzers, sweep
+        if session:
+            if "/" in session or "\\" in session or ".." in session or not (self.hub.sessions_dir / session / "meta.json").exists():
+                return {"error": "no such session"}
+            return sweep.compute(analyzers.from_session(open_session(self.hub.sessions_dir / session)))
+        if not self.hub.ring:
+            return {"error": "not running; pass a session name"}
+        return sweep.compute(analyzers.from_hub(self.hub))
+
     # --- display tools (drive the UI) -------------------------------------------------------------
     def show_chart(self, series: list[dict], from_s: float | None = None, to_s: float | None = None,
                    title: str = "") -> dict:

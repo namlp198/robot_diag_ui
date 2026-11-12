@@ -218,6 +218,30 @@ def cmd_analyze(args) -> int:
     return 0
 
 
+def cmd_sweep(args) -> int:
+    from . import analyzers, sweep
+    from .recorder import open_session
+
+    path = Path(args.session)
+    if not path.exists():
+        path = ROOT / "sessions" / args.session
+    res = sweep.compute(analyzers.from_session(open_session(path)))
+    if res.get("error"):
+        print("error:", res["error"], file=sys.stderr)
+        return 1
+    if args.csv:
+        print(sweep.to_csv(res["rows"]), end="")
+        return 0
+    print(f"sweep in {path.name} (boundaries from {res['source']})")
+    print(f"{'gap_ms':>7} {'sec':>6} {'sent':>6} {'rx':>6} {'accepted':>8} {'lost':>5} {'loss%':>6} {'crc':>4}")
+    for r in res["rows"]:
+        sent = r["sent"] if r["sent"] is not None else "-"
+        print(f"{r['gap_ms']:>7} {r['seconds']:>6} {sent:>6} {r['control_rx']:>6} "
+              f"{r['accepted']:>8} {r['lost']:>5} {r['loss_pct']:>6} {r['crc_errors']:>4}")
+    print(res["note"])
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):  # Vietnamese text must not crash a cp1252 console
         if hasattr(stream, "reconfigure"):
@@ -249,6 +273,10 @@ def main(argv: list[str] | None = None) -> int:
     an.add_argument("session")
     an.add_argument("--json", action="store_true")
     an.set_defaults(fn=cmd_analyze)
+    sw = sub.add_parser("sweep", help="loss-against-rate table of a recorded Phase 0 sweep")
+    sw.add_argument("session")
+    sw.add_argument("--csv", action="store_true")
+    sw.set_defaults(fn=cmd_sweep)
     rp = sub.add_parser("replay", help="list sessions, or summarise / dump one")
     rp.add_argument("session", nargs="?")
     rp.add_argument("--csv", action="store_true")

@@ -95,6 +95,11 @@ def build_server(box: ToolBox):
     async def get_findings(args):
         return _text(box.get_findings(args.get("session"), args.get("last_s", 120.0)))
 
+    @tool("get_sweep", "Phase 0 loss-against-rate table (per CONTROL gap step: sent, accepted, lost, loss %), live or from a recorded session.",
+          {"type": "object", "properties": {"session": {"type": "string"}}})
+    async def get_sweep(args):
+        return _text(box.get_sweep(args.get("session")))
+
     @tool("show_chart", "Show a chart in the user's UI. series items: {target, path, as: 'value'|'rate'}.",
           {"type": "object", "properties": {"series": {"type": "array", "items": {"type": "object"}},
                                             "from_s": {"type": "number"}, "to_s": {"type": "number"},
@@ -120,7 +125,7 @@ def build_server(box: ToolBox):
 
     return create_sdk_mcp_server("rdt", tools=[
         get_status, read_latest, get_series, get_log, find_symbols, members, list_sessions, session_summary,
-        get_findings, show_chart, annotate, highlight_range, get_view_context])
+        get_findings, get_sweep, show_chart, annotate, highlight_range, get_view_context])
 
 
 async def can_use_tool(tool_name, tool_input, ctx):

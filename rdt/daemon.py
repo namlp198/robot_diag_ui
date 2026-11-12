@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .cli import ROOT, elf_paths, load_targets, open_symbols
-from . import analyzers
+from . import analyzers, sweep as sweep_mod
 from .recorder import Recorder, list_sessions, open_session
 from .sampler import Sampler
 from .symbols import SymbolError, SymbolTable
@@ -341,6 +341,23 @@ def create_app(hub: Hub | None = None) -> FastAPI:
         if "/" in name or "\\" in name or ".." in name or not (p / "meta.json").exists():
             raise HTTPException(404, "no such session")
         return analyzers.analyze(analyzers.from_session(open_session(p)))
+
+    @app.get("/api/sweep")
+    def sweep_live():
+        if not hub.ring:
+            raise HTTPException(409, "not running")
+        return sweep_mod.compute(analyzers.from_hub(hub))
+
+    @app.get("/api/sessions/{name}/sweep")
+    def sweep_session(name: str, csv: bool = False):
+        p = hub.sessions_dir / name
+        if "/" in name or "\\" in name or ".." in name or not (p / "meta.json").exists():
+            raise HTTPException(404, "no such session")
+        res = sweep_mod.compute(analyzers.from_session(open_session(p)))
+        if csv:
+            from fastapi.responses import PlainTextResponse
+            return PlainTextResponse(sweep_mod.to_csv(res["rows"]), media_type="text/csv")
+        return res
 
     @app.get("/api/members")
     def members(target: str, path: str, limit: int = 256):

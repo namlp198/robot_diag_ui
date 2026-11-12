@@ -43,6 +43,9 @@ export const FLAGS = [
   { target: 'robot', path: 's_lora_rx.input.button_emergency', label: 'robot emergency', bad: true },
 ];
 
+// Read always (two cheap reads): lets rdt see a Phase 0 sweep without the VCP log.
+export const SWEEP = { remote: ['s_tx.out.sweep_step', 's_tx.out.sweep_gap_ms'] };
+
 export function watchSet() {
   const w = { robot: new Set(), remote: new Set() };
   for (const s of STAGES) {
@@ -51,5 +54,6 @@ export function watchSet() {
   }
   for (const [t, list] of Object.entries(RATES)) list.forEach((r) => w[t].add(r.path));
   FLAGS.forEach((f) => w[f.target].add(f.path));
+  for (const [t, list] of Object.entries(SWEEP)) list.forEach((p) => w[t].add(p));
   return Object.fromEntries(Object.entries(w).map(([t, s]) => [t, [...s]]));
 }
