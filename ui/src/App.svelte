@@ -6,6 +6,8 @@
   import LinkPanel from './LinkPanel.svelte';
   import Flags from './Flags.svelte';
   import Timeline from './Timeline.svelte';
+  import Chat from './Chat.svelte';
+  import ClaudeCharts from './ClaudeCharts.svelte';
 
   let hz = 10;
   let vcp = true;
@@ -64,12 +66,16 @@
 {/each}
 {#each $status.errors.filter((e) => !e.text.includes('FIRMWARE MISMATCH')).slice(-2) as e}<div class="err">{e.target}: {e.text}</div>{/each}
 
-<main>
-  <div class="wide"><SignalPath /></div>
-  <LinkPanel />
-  <Flags />
-  <div class="wide"><Timeline /></div>
-</main>
+<div class="layout">
+  <main>
+    <div class="wide"><SignalPath /></div>
+    <LinkPanel />
+    <Flags />
+    <div class="wide"><ClaudeCharts /></div>
+    <div class="wide"><Timeline /></div>
+  </main>
+  <Chat />
+</div>
 
 <style>
   header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
@@ -79,6 +85,8 @@
   .pill.replay { color: var(--accent); border-color: var(--accent); }
   label { display: flex; gap: 4px; align-items: center; }
   .err { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); padding: 6px 14px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; align-items: start; gap: 0 12px; padding-right: 12px; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
   main { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; padding: 12px 14px; }
   .wide { grid-column: 1 / -1; }
 </style>

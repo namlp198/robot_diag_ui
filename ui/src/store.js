@@ -8,6 +8,56 @@ export const latest = writable({}); // target -> path -> { v, t, changed }
 export const series = writable({}); // target -> { cols: [path], t: [], v: { path: [] } }
 export const events = writable([]); // { t, target, kind, text }
 export const replayName = writable(null);
+export const chat = writable({ items: [], busy: false, model: null, cost: 0, sessionId: null });
+export const claudeCharts = writable([]); // { id, title, series: [{target,path,as}], from, to }
+export const highlights = writable([]); // { t0, t1, label }
+
+function chatEvent(m) {
+  chat.update((c) => {
+    const items = c.items;
+    const last = items[items.length - 1];
+    switch (m.kind) {
+      case 'user': items.push({ k: 'user', text: m.text }); c.busy = true; break;
+      case 'init': c.model = m.model; c.sessionId = m.session_id; break;
+      case 'text_delta':
+        if (last && last.k === 'assistant' && last.streaming) last.text += m.text;
+        else items.push({ k: 'assistant', text: m.text, streaming: true });
+        break;
+      case 'text':
+        if (last && last.k === 'assistant' && last.streaming) { last.text = m.text; last.streaming = false; }
+        else items.push({ k: 'assistant', text: m.text });
+        break;
+      case 'tool_use': items.push({ k: 'tool', id: m.id, name: m.name, input: m.input, state: 'running' }); break;
+      case 'tool_result': {
+        const t = items.find((x) => x.k === 'tool' && x.id === m.id);
+        if (t) { t.state = m.is_error ? 'error' : 'done'; t.result = m.text; }
+        break;
+      }
+      case 'result': c.cost += m.cost_usd ?? 0; break;
+      case 'error': items.push({ k: 'error', text: m.text }); break;
+      case 'idle': c.busy = false; items.forEach((x) => (x.streaming = false)); break;
+    }
+    return c;
+  });
+}
+
+function uiCommand(m) {
+  if (m.cmd === 'show_chart') claudeCharts.update((a) => [...a.slice(-3), { id: Date.now() + Math.random(), title: m.title, series: m.series, from: m.from, to: m.to }]);
+  else if (m.cmd === 'highlight') highlights.update((a) => [...a, { t0: m.t0, t1: m.t1, label: m.label }]);
+  else if (m.cmd === 'annotate') pushEvent({ t: m.t, target: m.target || 'claude', kind: 'note', text: m.text });
+}
+
+export async function sendChat(text, view) {
+  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, view }) });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? r.statusText);
+}
+export const stopChat = () => fetch('/api/chat/stop', { method: 'POST' });
+export async function resetChat() {
+  await fetch('/api/chat/reset', { method: 'POST' });
+  chat.set({ items: [], busy: false, model: null, cost: 0, sessionId: null });
+  claudeCharts.set([]);
+  highlights.set([]);
+}
 
 let ws = null;
 let mode = 'live';
@@ -53,6 +103,8 @@ function onMessage(ev) {
   if (m.type === 'hello') status.set(m.status);
   else if (m.type === 'sample') onSample(m);
   else if (m.type === 'log') pushEvent({ t: m.t, target: m.target, kind: 'log', text: m.line });
+  else if (m.type === 'chat') chatEvent(m);
+  else if (m.type === 'ui') uiCommand(m);
   else if (m.type === 'error') pushEvent({ t: m.t, target: m.target, kind: 'error', text: m.text });
 }
 

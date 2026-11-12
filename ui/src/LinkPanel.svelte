@@ -4,24 +4,12 @@
   import 'uplot/dist/uPlot.min.css';
   import { RATES } from './panels.js';
   import { series } from './store.js';
+  import { rate } from './util.js';
 
   const COLORS = ['#2b6cff', '#d23b3b', '#e08a00', '#1e8e4e', '#8a4fd0'];
   const WINDOW_S = 60;
   const charts = {}; // target -> { plot, el }
   let els = {};
-
-  // counter -> per-second rate over ~1 s, so lost/crc/dup read as "events per second", not a growing total.
-  function rate(t, v) {
-    const out = [];
-    let j = 0;
-    for (let i = 0; i < t.length; i++) {
-      while (t[i] - t[j] > 1.0) j++;
-      const dt = t[i] - t[j];
-      const d = v[i] - v[j];
-      out.push(dt > 0.2 && typeof d === 'number' && d >= 0 ? d / dt : null);
-    }
-    return out;
-  }
 
   function build(target) {
     const list = RATES[target];

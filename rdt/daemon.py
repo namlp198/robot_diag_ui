@@ -40,6 +40,11 @@ class WatchRequest(BaseModel):
     vcp: list[str] = []
 
 
+class ChatRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    view: dict | None = None
+
+
 class RecordRequest(BaseModel):
     label: str = Field("", pattern=r"^[A-Za-z0-9_-]{0,40}$")
 
@@ -60,6 +65,8 @@ class Hub:
         self.recorder: Recorder | None = None
         self.t0 = time.perf_counter()
         self.running = False
+        self.chat = None  # ChatSession, created on first use (needs claude_agent_sdk)
+        self.box = None
 
     # --- fan-out (called from sampler threads) -------------------------------------------------
     def _publish(self, msg: dict):
@@ -180,6 +187,8 @@ def create_app(hub: Hub | None = None) -> FastAPI:
     async def lifespan(_app):
         hub.loop = asyncio.get_running_loop()
         yield
+        if hub.chat is not None:
+            await hub.chat.close()
         hub.stop()
 
     app = FastAPI(title="rdt daemon", docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=lifespan)
@@ -192,6 +201,39 @@ def create_app(hub: Hub | None = None) -> FastAPI:
         if host not in LOCAL_HOSTS or (origin and _host_only(origin.split("://", 1)[-1]) not in LOCAL_HOSTS):
             return JSONResponse({"detail": "local access only"}, status_code=403)
         return await call_next(request)
+
+    def get_chat():
+        if hub.chat is None:
+            try:
+                from .agent_tools import ToolBox
+                from .claude_bridge import ChatSession
+            except ImportError as e:
+                raise HTTPException(501, f"chat needs claude-agent-sdk: pip install -e .[chat] ({e})")
+            hub.box = ToolBox(hub, ui=lambda m: hub._publish({"type": "ui", **m}))
+            hub.chat = ChatSession(hub.box, emit=hub._publish)
+        return hub.chat
+
+    @app.post("/api/chat")
+    async def chat(req: ChatRequest):
+        c = get_chat()
+        try:
+            c.start_turn(req.text, req.view)
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        return {"ok": True}
+
+    @app.post("/api/chat/stop")
+    async def chat_stop():
+        if hub.chat is not None:
+            await hub.chat.interrupt()
+        return {"ok": True}
+
+    @app.post("/api/chat/reset")
+    async def chat_reset():
+        if hub.chat is not None:
+            await hub.chat.close()
+            hub.chat = None
+        return {"ok": True}
 
     @app.get("/api/status")
     def status():

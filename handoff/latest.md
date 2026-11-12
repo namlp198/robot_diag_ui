@@ -10,6 +10,9 @@
 
 ## Latest change
 
+- D3 built (2026-11-12): `rdt/agent_tools.py` (12 read/display tools, unit-tested), `rdt/claude_bridge.py` (Agent SDK 0.2.180, profile "analysis": no built-ins, only `mcp__rdt__*`, settings not loaded), `/api/chat|chat/stop|chat/reset`, UI `Chat.svelte` (messages, tool cards, cost) and `ClaudeCharts.svelte` (show_chart, highlight_range; annotate goes to the timeline). Decision 0002. 22 tests pass.
+- **Not verified: a live Claude turn.** The bundled CLI is not logged in ("Not logged in"); the user must run `.venv\Lib\site-packages\claude_agent_sdk\_bundled\claude.exe auth login` once. Then run `python -I scripts/s3_spike.py` (tool call, permission callback, resume) and ask a question in the UI with the boards running.
+
 - **RESOLVED (2026-11-12): which firmware is on the boards.** Robot = `robot_s_rtos` model SFF-02 (not `robot_att`); it runs the **SFF02_Release** image (16/16 flash chunks match the Release ELF from 2026-11-11 15:02). Remote = `robot_rc_rtos` **SFF_Debug** (16/16 match). `targets.yaml` now has `image_elf` for the robot: Release has no DWARF, so types come from the SFF02_Debug ELF and addresses from the Release `.symtab` (size mismatch drops the variable). With these, robot `s_lora_rx.parser.stats.frames` 59950 vs remote `s_tx.out.control_frames` 59975: consistent.
 - I rebuilt (headless CubeIDE 1.19.0, 0 errors 0 warnings) `robot_rc_rtos` ATT_Debug and `robot_s_rtos` SFF02_Debug in those repos' build folders. Nothing flashed, no source touched.
 - `rdt/verify.py` compares 16 flash chunks with the ELF at attach; the daemon shows a banner if they differ. Check it after any re-flash.
@@ -37,4 +40,4 @@
 
 ## Next
 
-Review the signal-path variables against the SFF firmware (`ui/src/panels.js`; robot_s_rtos has its own kinematics/CAN variables), then D3 chat (spike S3 first), D4 analyzers.
+Review the signal-path variables against the SFF firmware (`ui/src/panels.js`; robot_s_rtos has its own kinematics/CAN variables), D4 analyzers, D5 scripts and flashing. Tool-write profile (flash/reset) does not exist yet and needs a UI confirmation card first.
