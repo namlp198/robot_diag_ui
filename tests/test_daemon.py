@@ -64,3 +64,15 @@ def test_symbols_search(client):
     assert any(x["path"] == "s_lora_rx" and x["size"] > 0 for x in j)
     r = client.get("/api/resolve", params={"target": "robot", "path": "s_lora_rx.filter.stats.lost"}).json()
     assert r["size"] == 4
+
+
+def test_flash_rejects_unknown_target_and_foreign_paths(client):
+    assert client.post("/api/flash/plan", json={"target": "nope", "image": "x.elf"}).status_code == 404
+    r = client.post("/api/flash/plan", json={"target": "remote", "image": "C:/Windows/notepad.exe"})
+    assert r.status_code == 400 and "workspace" in r.json()["detail"]
+
+
+def test_flash_candidates_only_from_allowed_globs(client):
+    c = client.get("/api/flash/candidates").json()
+    assert set(c) >= {"robot", "remote"}
+    assert all("robot_att" not in f and "ATT_" not in f for f in c["robot"] + c["remote"])

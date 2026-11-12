@@ -242,6 +242,46 @@ def cmd_sweep(args) -> int:
     return 0
 
 
+def cmd_flash_plan(args) -> int:
+    """Dry run only. Programming is available through the daemon API/UI with an explicit confirmation."""
+    import json
+
+    from .backend import BackendError, Probe, list_serials
+    from . import flash
+
+    targets = load_targets()
+    if args.target not in targets:
+        print(f"unknown target {args.target!r}", file=sys.stderr)
+        return 2
+    cfg = targets[args.target]
+    img = Path(args.image)
+    img = (img if img.is_absolute() else ROOT / img).resolve()
+    try:
+        probe = Probe(cfg["probe_serial"]).open()
+    except BackendError as e:
+        print(f"note: probe not readable: {e}", file=sys.stderr)
+        probe = None
+    try:
+        p = flash.plan(args.target, cfg, img, ROOT, probe.read if probe else None,
+                       lambda s: s in list_serials() or probe is not None)
+    except flash.FlashError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    finally:
+        if probe:
+            probe.close()
+    if args.json:
+        print(json.dumps(p.to_dict(), indent=2))
+    else:
+        for c in p.checks:
+            print(f"[{'ok' if c.ok else 'FAIL'}] {c.name}: {c.detail}")
+        print("already flashed (no-op):", p.already_flashed)
+        print("command:", " ".join(p.command))
+        print("confirm phrase:", p.confirm, "| robot also needs motors_safe:", p.needs_motors_safe)
+        print("PLAN OK" if p.ok else "PLAN REFUSED")
+    return 0 if p.ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):  # Vietnamese text must not crash a cp1252 console
         if hasattr(stream, "reconfigure"):
@@ -277,6 +317,11 @@ def main(argv: list[str] | None = None) -> int:
     sw.add_argument("session")
     sw.add_argument("--csv", action="store_true")
     sw.set_defaults(fn=cmd_sweep)
+    fp = sub.add_parser("flash-plan", help="dry run of a flash: checks and command, writes nothing")
+    fp.add_argument("target")
+    fp.add_argument("image")
+    fp.add_argument("--json", action="store_true")
+    fp.set_defaults(fn=cmd_flash_plan)
     rp = sub.add_parser("replay", help="list sessions, or summarise / dump one")
     rp.add_argument("session", nargs="?")
     rp.add_argument("--csv", action="store_true")

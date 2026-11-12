@@ -8,10 +8,21 @@ targets:
     # Release has no DWARF: types come from the SFF02_Debug ELF, addresses from the Release .symtab.
     elf: ../robot_s_rtos/CM7/SFF02_Debug/robot_s_rtos_H7_CM7.elf
     image_elf: ../robot_s_rtos/CM7/SFF02_Release/robot_s_rtos_H7_CM7.elf
+    dev_id: 0x450                 # DBGMCU_IDC[11:0], STM32H74x/75x
+    idcode_addr: 0x5C001000
+    flash_range: [0x08000000, 0x080FFFFF]   # CM7 bank only; CM4 and paired flashing are not supported
+    needs_motors_safe: true
+    allowed_images:
+      - ../robot_s_rtos/CM7/SFF02_*/*.elf
     log_port: null          # USART3 is shared with the E22 receive path: never open it
   remote:
     mcu: STM32F446
     probe_serial: "066CFF3833584B3043204649"   # was 0670FF51..., changed 2026-11-12 (user-confirmed)
     elf: ../robot_rc_rtos/SFF_Debug/robot_rc_rtos.elf   # remote SFF (verified to match the flashed image)
+    dev_id: 0x421                 # DBGMCU_IDCODE[11:0], STM32F446
+    idcode_addr: 0xE0042000
+    flash_range: [0x08000000, 0x0807FFFF]
+    allowed_images:
+      - ../robot_rc_rtos/SFF_*/*.elf
     log_port: auto          # USART2 VCP, 115200
     log_baud: 115200

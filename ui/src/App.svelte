@@ -9,6 +9,7 @@
   import Chat from './Chat.svelte';
   import Findings from './Findings.svelte';
   import Sweep from './Sweep.svelte';
+  import Flash from './Flash.svelte';
   import ClaudeCharts from './ClaudeCharts.svelte';
 
   let hz = 10;
@@ -77,6 +78,7 @@
     <div class="wide"><ClaudeCharts /></div>
     <div class="wide"><Sweep /></div>
     <div class="wide"><Timeline /></div>
+    <div class="wide"><Flash /></div>
   </main>
   <Chat />
 </div>

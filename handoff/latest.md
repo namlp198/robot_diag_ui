@@ -10,6 +10,9 @@
 
 ## Latest change
 
+- D5 (2026-11-12): `rdt/sweep.py` (read-only port of link_sweep.ps1: `rdt sweep`, `/api/sweep`, Claude tool `get_sweep`, UI table + CSV; not seen with a real sweep because the remote runs a normal build) and `rdt/flash.py` (gated flashing, decision 0003): `rdt flash-plan` dry run, `/api/flash/plan|run|candidates`, UI card with confirm phrase and motors-safe checkbox. **No board was flashed.** Dry runs on both boards: flashed images give PLAN OK (already flashed), robot_att / ATT images refused. 56 tests pass.
+- `targets.yaml` now has `dev_id`, `idcode_addr`, `flash_range`, `allowed_images`, `needs_motors_safe` per target.
+
 - D4 (2026-11-12): `rdt/analyzers.py` rule engine from debug_guide 5.5 and task_history 122/133/147: remote restart, lost jump (not counted as loss), real loss % with bursts, robot not receiving vs remote not sending, CRC, truncated, connected flap, frames-but-not-connected (+LINK_ID hint), remote ESTOP, link_down, tx failures, sample gaps, VCP log patterns. Missing variables skip the rule (listed in `skipped`). Surfaces: `rdt analyze <session>`, `/api/findings`, `/api/sessions/{n}/findings`, live `finding` events every 2 s, UI "Chẩn đoán tự động" panel + timeline, Claude tool `get_findings`. Real 45 s session `d4real`: 1.2% real loss (11 lost / 870), consistent with the chat answer. 38 tests pass.
 - `diag_block_t` v1 DRAFT only: `outputs/claude_drafts/diag_block_spec.md` and decoder `rdt/diag_block.py` (+tests). Needs adoption and a decision in robot_s_rtos and robot_rc_rtos; no firmware edited.
 - Rules are tuned on one healthy-ish run and synthetic data; thresholds (1.5 s stall, 2 s not-connected, 3 flaps, 200 = restart jump) have not seen a real fault. The VCP regexes are guesses at log wording.
@@ -44,4 +47,4 @@
 
 ## Next
 
-Review the signal-path variables against the SFF firmware (`ui/src/panels.js`; robot_s_rtos has its own kinematics/CAN variables), D4 analyzers, D5 scripts and flashing. Tool-write profile (flash/reset) does not exist yet and needs a UI confirmation card first.
+Review the signal-path variables against the SFF firmware (`ui/src/panels.js`; robot_s_rtos has its own kinematics/CAN variables), D4 analyzers, D5 scripts and flashing. Open: flash `run` on a bench board (wheels off, power cut) with the user present; paired flashing + RCL_VERSION check; real sweep with the sweep build; D4 threshold tuning on real faults; adopt diag_block_t in firmware.

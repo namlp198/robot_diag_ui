@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .cli import ROOT, elf_paths, load_targets, open_symbols
-from . import analyzers, sweep as sweep_mod
+from . import analyzers, flash as flash_mod, sweep as sweep_mod
 from .recorder import Recorder, list_sessions, open_session
 from .sampler import Sampler
 from .symbols import SymbolError, SymbolTable
@@ -39,6 +39,13 @@ class WatchRequest(BaseModel):
     watches: dict[str, list[str]] = Field(description="target -> variable paths")
     hz: float = Field(10.0, gt=0, le=200)
     vcp: list[str] = []
+
+
+class FlashRequest(BaseModel):
+    target: str
+    image: str
+    confirm: str = ""
+    motors_safe: bool = False
 
 
 class ChatRequest(BaseModel):
@@ -66,6 +73,7 @@ class Hub:
         self.recorder: Recorder | None = None
         self.t0 = time.perf_counter()
         self.running = False
+        self.flashing = False
         self.findings: dict[tuple, dict] = {}  # live findings seen so far, keyed to avoid repeats
         self.chat = None  # ChatSession, created on first use (needs claude_agent_sdk)
         self.box = None
@@ -112,6 +120,8 @@ class Hub:
     # --- control ---------------------------------------------------------------------------------
     def start(self, req: WatchRequest):
         with self.lock:
+            if self.flashing:
+                raise HTTPException(409, "a flash is in progress")
             if self.running:
                 raise HTTPException(409, "already running; POST /api/stop first")
             for name in [*req.watches, *req.vcp]:
@@ -341,6 +351,69 @@ def create_app(hub: Hub | None = None) -> FastAPI:
         if "/" in name or "\\" in name or ".." in name or not (p / "meta.json").exists():
             raise HTTPException(404, "no such session")
         return analyzers.analyze(analyzers.from_session(open_session(p)))
+
+    def _flash_inputs(req: FlashRequest):
+        if req.target not in hub.targets:
+            raise HTTPException(404, "unknown target")
+        cfg = hub.targets[req.target]
+        img = Path(req.image)
+        img = (img if img.is_absolute() else ROOT / img).resolve()
+        if not img.is_relative_to(ROOT.parent):
+            raise HTTPException(400, "image must be inside the workspace repositories folder")
+        return cfg, img
+
+    def _flash_plan(req: FlashRequest):
+        from .backend import BackendError, Probe, list_serials
+        cfg, img = _flash_inputs(req)
+        if hub.running or hub.flashing:
+            raise HTTPException(409, "stop reading first: flashing needs the probe exclusively")
+        probe = None
+        try:
+            probe = Probe(cfg["probe_serial"]).open()
+            read = probe.read
+        except BackendError:
+            read = None
+        try:
+            return flash_mod.plan(req.target, cfg, img, ROOT, read,
+                                  lambda s: s in list_serials() or probe is not None), cfg
+        except flash_mod.FlashError as e:
+            raise HTTPException(400, str(e))
+        finally:
+            if probe is not None:
+                probe.close()
+
+    @app.get("/api/flash/candidates")
+    def flash_candidates():
+        """ELF files that match each target's allowed_images (the only images the plan will accept)."""
+        import glob
+        import os as _os
+        out = {}
+        for name, cfg in hub.targets.items():
+            files = []
+            for g in cfg.get("allowed_images", []):
+                files += glob.glob(_os.path.normpath(str(ROOT / g)))
+            out[name] = sorted(str(Path(f).resolve()) for f in files)
+        return out
+
+    @app.post("/api/flash/plan")
+    def flash_plan(req: FlashRequest):
+        """Read-only dry run: checks and the exact command. Nothing is written."""
+        p, _cfg = _flash_plan(req)
+        return p.to_dict()
+
+    @app.post("/api/flash/run")
+    def flash_run(req: FlashRequest):
+        """Programs the board. Needs the plan's confirm phrase (+ motors_safe for the robot) and a stopped daemon."""
+        from .backend import Probe
+        p, cfg = _flash_plan(req)
+        hub.flashing = True
+        try:
+            return flash_mod.run(p, cfg, req.confirm, req.motors_safe, ROOT, hub.sessions_dir,
+                                 read_after=lambda: Probe(cfg["probe_serial"]).open().read)
+        except flash_mod.FlashError as e:
+            raise HTTPException(400, str(e))
+        finally:
+            hub.flashing = False
 
     @app.get("/api/sweep")
     def sweep_live():
