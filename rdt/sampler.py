@@ -53,6 +53,22 @@ class Sampler(threading.Thread):
         with self._expr_lock:
             self._exprs = list(exprs)
 
+    def set_tap(self, tap, sink: Callable[[str, float, list, dict], None]):
+        """A frame tap (rdt.cantap.CanTap): polled on every tick; `sink(target, t, frames, stats)` gets what it saw."""
+        self._tap, self._tap_sink = tap, sink
+
+    def _poll_tap(self, probe, t: float):
+        tap = getattr(self, "_tap", None)
+        if tap is None:
+            return
+        try:
+            frames, stats = tap.poll(probe.read, t)
+        except Exception as err:  # a tap bug must not stop the sampling of the watched variables
+            self.on_error(self.target, f"can tap: {str(err)[:120]}")
+            self._tap = None
+            return
+        self._tap_sink(self.target, t, frames, stats)
+
     def _read_exprs(self, probe, t: float):
         with self._expr_lock:
             ex = list(self._exprs)
@@ -84,6 +100,7 @@ class Sampler(threading.Thread):
                         self.reads += 1
                         self.sink(self.target, tick - self.t0, vals)
                     self._read_exprs(probe, tick - self.t0)
+                    self._poll_tap(probe, tick - self.t0)
                     self.stop_event.wait(max(0.0, period - (time.perf_counter() - tick)))
         except BackendError as e:
             self.on_error(self.target, str(e))

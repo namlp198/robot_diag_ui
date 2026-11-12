@@ -27,6 +27,10 @@ Variables read over SWD without stopping the cores. Names are resolved from the 
 | `s_tx.out.frame_len` | remote | frames | Length in bytes of the frame in `s_tx.out.frame`. |
 | `s_rx.parser.buf` | remote | frames | Byte buffer of the remote's receive parser; holds the last telemetry frame from the robot until the next one overwrites it. |
 | `s_lora_rx.parser.buf` | robot | frames | Byte buffer of the robot's receive parser; holds the last CONTROL frame from the remote until the next one overwrites it. |
+| `RxHeader` | robot | can | HAL header (identifier, ID type, length, timestamp) of the last CAN frame the firmware took out of RX FIFO0. One slot, overwritten by every frame. |
+| `RxData` | robot | can | The 8 data bytes of the same last received CAN frame. |
+| `hfdcan1.Instance` | robot | can | Pointer to the FDCAN1 registers; rdt reads the TXFQS register (offset 0xC4: TX FIFO put index and free level) to see how many frames were queued since the last poll. Needs 'allow peripheral reads'. PSR and ECR are deliberately not read: reading them changes what the firmware sees. |
+| `hfdcan1.msgRam.TxFIFOQSA` | robot | can | Start address of the TX FIFO in the FDCAN message RAM; its elements (identifier, length, data) are read to rebuild the frames queued for sending. With TxElmtSize and TxFifoQueueElmtsNbr (element size in words, number of elements). |
 | `s_lora_rx.parser.stats.frames` | robot | signal,link | Frames the robot's LoRa parser decoded. |
 | `s_lora_rx.parser.stats.crc_errors` | robot | link | Frames dropped for a bad CRC (noise, wrong baud, remote not speaking RCL v1). |
 | `s_lora_rx.parser.stats.truncated` | robot | link | Frames cut short (remote sending slower than 500 ms or weak signal). |

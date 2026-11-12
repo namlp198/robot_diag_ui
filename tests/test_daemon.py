@@ -110,6 +110,24 @@ def test_live_frames_are_published_as_websocket_frame_messages(tmp_path):
     assert [m["type"] for m in sent] == ["sample", "frame"]
 
 
+def test_can_frames_message_type_and_session_file(tmp_path):
+    """The WebSocket message type must stay "can" (a frame field called `type` once hid a message)."""
+    hub = Hub(sessions_dir=tmp_path)
+    sent = []
+    hub._publish = sent.append
+    f = {"dir": "tx", "id": 0x601, "ext": False, "rtr": False, "fd": False, "brs": False, "dlc": 2, "data": "4041", "ts": None, "label": "x"}
+    v = Resolved("a", 0x20000000, 4, "uint", "uint32_t")
+    from rdt.recorder import Recorder
+    with Recorder(tmp_path, {"robot": {"serial": "S", "elf": "x", "paths": ["a"], "vars": [v]}}) as r:
+        hub.recorder = r
+        hub.on_can("robot", 1.5, [f], {"polls": 1, "tx_frames": 1})
+        hub.recorder = None
+    assert sent[0]["type"] == "can" and sent[0]["frames"][0]["id"] == 0x601 and sent[0]["frames"][0]["target"] == "robot"
+    from rdt.recorder import open_session
+    assert open_session(r.dir).can("robot")[0]["id"] == 0x601
+    assert hub.can[-1]["t"] == 1.5
+
+
 def test_symbols_search(client):
     elf = (ROOT / load_targets()["robot"]["elf"]).resolve()
     if not elf.exists():

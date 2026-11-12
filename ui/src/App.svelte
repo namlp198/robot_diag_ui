@@ -14,6 +14,7 @@
   import CubeCli from './CubeCli.svelte';
   import Reference from './Reference.svelte';
   import Frames from './Frames.svelte';
+  import CanFrames from './CanFrames.svelte';
   import LiveExpr from './LiveExpr.svelte';
   import Settings from './Settings.svelte';
   import { t, theme, lang, toggleTheme, toggleLang, localizeError } from './i18n.js';
@@ -94,7 +95,7 @@
     <div class="wide"><Timeline /></div>
     <div class="wide"><Flash /></div>
   </main>
-  {#if view === 'frames'}<main class="single stack"><Frames /></main>{/if}
+  {#if view === 'frames'}<main class="single stack"><Frames /><CanFrames /></main>{/if}
   {#if view === 'expr'}<main class="single"><LiveExpr /></main>{/if}
   {#if view === 'cli'}<main class="single"><CubeCli /></main>{/if}
   {#if view === 'reference'}<main class="single"><Reference /></main>{/if}

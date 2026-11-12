@@ -12,6 +12,8 @@ export const chat = writable({ items: [], busy: false, model: null, cost: 0, ses
 export const claudeCharts = writable([]); // { id, title, series: [{target,path,as}], from, to }
 export const highlights = writable([]);
 export const frames = writable([]); // decoded RCL frames (rdt/rcl.py), live or from a recorded session
+export const canFrames = writable([]); // CAN/FDCAN frames sampled on the robot (rdt/cantap.py)
+export const canStats = writable({}); // target -> tap statistics
 export const exprLatest = writable({}); // target -> { t, values: { id: value | { error } } } (live expressions)
 export const findings = writable([]); // analyzer findings, live or from a recorded session // { t0, t1, label }
 
@@ -116,6 +118,12 @@ function onMessage(ev) {
   else if (m.type === 'frame') {
     if (mode === 'live') { const { type, ...f } = m; frames.update((a) => (a.length >= 600 ? [...a.slice(-500), f] : [...a, f])); }
   }
+  else if (m.type === 'can') {
+    if (mode === 'live') {
+      if (m.frames.length) canFrames.update((a) => (a.length + m.frames.length > 1500 ? [...a.slice(-1000), ...m.frames] : [...a, ...m.frames]));
+      canStats.update((s) => ({ ...s, [m.target]: m.stats }));
+    }
+  }
   else if (m.type === 'expr') exprLatest.update((L) => ({ ...L, [m.target]: { t: m.t, values: m.values } }));
   else if (m.type === 'chat') chatEvent(m);
   else if (m.type === 'ui') uiCommand(m);
@@ -159,6 +167,8 @@ export async function startWatch(watches, hz, vcp) {
   events.set([]);
   findings.set([]);
   frames.set([]);
+  canFrames.set([]);
+  canStats.set({});
   exprLatest.set({});
   status.set(await post('/api/watch', { watches, hz, vcp }));
 }
@@ -220,6 +230,8 @@ export async function loadSession(name) {
     (fr.findings ?? []).forEach((f) => ev.push({ t: f.t0, target: f.target, kind: 'finding', text: `${f.severity}: ${f.title}`, finding: f }));
   } catch { findings.set([]); }
   try { frames.set((await (await fetch(`/api/sessions/${encodeURIComponent(name)}/frames`)).json()).frames ?? []); } catch { frames.set([]); }
+  try { canFrames.set((await (await fetch(`/api/sessions/${encodeURIComponent(name)}/can`)).json()).frames ?? []); } catch { canFrames.set([]); }
+  canStats.set({});
   ev.sort((a, b) => a.t - b.t);
   latest.set(L);
   series.set(S);
@@ -236,5 +248,7 @@ export function backToLive() {
   events.set([]);
   findings.set([]);
   frames.set([]);
+  canFrames.set([]);
+  canStats.set({});
   refresh();
 }

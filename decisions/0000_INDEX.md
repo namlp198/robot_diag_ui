@@ -7,4 +7,5 @@
 | 0003 | Gated flashing (confirm phrase, DEV_ID, allowed images) and read-only sweep | Accepted, flash run verified (same-image re-flash on both boards) | 2026-11-12 |
 | 0004 | SWO/ITM as a robot log source (spike S4) | Parked: two loopback runs, no SWO bytes (check solder bridge SB50) | 2026-11-12 |
 | 0005 | UI themes, bilingual UI, reference pages, read-only Programmer CLI runner | Accepted | 2026-11-12 |
-| 0006 | RCL frame view, Live Expressions, chat settings | Accepted, not yet run on live boards | 2026-11-12 |
+| 0006 | RCL frame view, Live Expressions, chat settings | Accepted, run on the live remote | 2026-11-12 |
+| 0007 | CAN / FDCAN frame sampling on the robot | Accepted as best effort, not yet run on the robot | 2026-11-12 |

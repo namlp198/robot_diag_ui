@@ -27,6 +27,10 @@ Các biến được đọc qua SWD mà không dừng core. Tên biến được
 | `s_tx.out.frame_len` | remote | frames | Độ dài (byte) của frame trong `s_tx.out.frame`. |
 | `s_rx.parser.buf` | remote | frames | Bộ đệm byte của parser nhận ở remote; giữ frame telemetry cuối cùng từ robot cho tới khi frame sau ghi đè. |
 | `s_lora_rx.parser.buf` | robot | frames | Bộ đệm byte của parser nhận ở robot; giữ frame CONTROL cuối cùng từ remote cho tới khi frame sau ghi đè. |
+| `RxHeader` | robot | can | Header HAL (ID, loại ID, độ dài, timestamp) của frame CAN cuối cùng firmware lấy ra khỏi RX FIFO0. Chỉ một ô, bị ghi đè mỗi frame. |
+| `RxData` | robot | can | 8 byte dữ liệu của cùng frame CAN nhận cuối cùng. |
+| `hfdcan1.Instance` | robot | can | Con trỏ tới thanh ghi FDCAN1; rdt đọc thanh ghi TXFQS (offset 0xC4: chỉ số put và số ô trống của TX FIFO) để biết bao nhiêu frame đã được xếp hàng từ lần đọc trước. Cần 'cho phép đọc thanh ghi ngoại vi'. Cố ý không đọc PSR và ECR vì đọc sẽ làm đổi trạng thái firmware thấy. |
+| `hfdcan1.msgRam.TxFIFOQSA` | robot | can | Địa chỉ bắt đầu của TX FIFO trong message RAM của FDCAN; đọc các phần tử (ID, độ dài, dữ liệu) để dựng lại các frame đã xếp hàng gửi. Kèm TxElmtSize và TxFifoQueueElmtsNbr (cỡ phần tử tính bằng từ, số phần tử). |
 | `s_lora_rx.parser.stats.frames` | robot | signal,link | Số frame parser LoRa của robot giải mã được. |
 | `s_lora_rx.parser.stats.crc_errors` | robot | link | Số frame bị bỏ vì sai CRC (nhiễu, sai baud, remote không nói RCL v1). |
 | `s_lora_rx.parser.stats.truncated` | robot | link | Số frame bị cắt (remote gửi thưa hơn 500 ms hoặc sóng yếu). |

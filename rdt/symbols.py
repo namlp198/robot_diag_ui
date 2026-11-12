@@ -63,12 +63,19 @@ class SymbolTable:
     def _index(self):
         for cu in self._dwarf.iter_CUs():
             for die in cu.iter_DIEs():
-                if die.tag != "DW_TAG_variable" or "DW_AT_name" not in die.attributes:
+                if die.tag != "DW_TAG_variable":
+                    continue
+                # A global declared `extern` in a header is emitted twice: a declaration DIE (name, type) and a definition
+                # DIE (location) that points to it with DW_AT_specification and has neither name nor type of its own.
+                spec = die.get_DIE_from_attribute("DW_AT_specification") if "DW_AT_specification" in die.attributes else None
+                named = die if "DW_AT_name" in die.attributes else spec
+                if named is None or "DW_AT_name" not in named.attributes:
                     continue
                 addr = self._static_address(die.attributes.get("DW_AT_location"))
                 if addr is None:
                     continue
-                self._vars.setdefault(die.attributes["DW_AT_name"].value.decode(), (die, addr))
+                typed = die if "DW_AT_type" in die.attributes else (spec if spec is not None else die)
+                self._vars.setdefault(named.attributes["DW_AT_name"].value.decode(), (typed, addr))
 
     def _rebase(self, image_elf: Path):
         found: dict[str, list[tuple[int, int]]] = {}

@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .cli import ROOT, elf_paths, load_targets, open_symbols
-from . import (analyzers, cubecli as cubecli_mod, exprs as exprs_mod, flash as flash_mod, rcl as rcl_mod,
+from . import (analyzers, cantap as cantap_mod, cubecli as cubecli_mod, exprs as exprs_mod, flash as flash_mod, rcl as rcl_mod,
                reference as reference_mod, settings as settings_mod, sweep as sweep_mod)
 from .recorder import Recorder, list_sessions, open_session
 from .sampler import Sampler
@@ -96,6 +96,8 @@ class Hub:
         self.expr_latest: dict[str, dict] = {}    # target -> {"t": ..., "values": {id: value}}
         self.frames: deque = deque(maxlen=600)    # decoded RCL frames seen in the boards' buffers (rdt.rcl)
         self.capture: rcl_mod.FrameCapture | None = None
+        self.can: deque = deque(maxlen=1500)      # sampled CAN frames (rdt.cantap), newest last
+        self.can_stats: dict[str, dict] = {}      # target -> tap statistics
 
     # --- fan-out (called from sampler threads) -------------------------------------------------
     def _publish(self, msg: dict):
@@ -126,6 +128,18 @@ class Hub:
                 with self.lock:
                     self.frames.append(fr)
                 self._publish({"type": "frame", **fr})
+
+    def on_can(self, target: str, t: float, frames: list[dict], stats: dict):
+        """CAN frames sampled by rdt.cantap. The message carries `frames` and `stats` (no frame field named `type`)."""
+        stamped = [{**f, "t": round(t, 6), "target": target} for f in frames]
+        with self.lock:
+            self.can_stats[target] = stats
+            for f in stamped:
+                self.can.append(f)
+                if self.recorder:
+                    self.recorder.add_can(target, t, {k: v for k, v in f.items() if k not in ("t", "target")})
+        if stamped or stats.get("polls", 0) % 10 == 1:  # stats at least every 10th poll
+            self._publish({"type": "can", "target": target, "frames": stamped, "stats": stats})
 
     def on_expr(self, target: str, t: float, values: dict):
         with self.lock:
@@ -205,9 +219,21 @@ class Hub:
                     readers.append(VcpReader(name, self.targets[name], self.on_log, t0, self.on_error))
             except (SymbolError, VcpError, OSError) as e:
                 raise HTTPException(400, str(e))
+            self.can.clear()
+            self.can_stats = {}
             for sm in samplers:
                 sm.expr_sink = self.on_expr
                 sm.set_exprs(self.exprs.get(sm.target, []))
+                try:  # CAN frame tap for targets whose firmware has an FDCAN1 handle (the robot)
+                    st = open_symbols(self.targets[sm.target])
+                    try:
+                        tap = cantap_mod.build(self.targets[sm.target], st, self.settings.current.allow_peripheral_reads)
+                    finally:
+                        st.close()
+                    if tap is not None:
+                        sm.set_tap(tap, self.on_can)
+                except (SymbolError, OSError):
+                    pass
             self.t0 = t0
             self.samplers, self.readers = samplers, readers
             self.ring = {s.target: deque(maxlen=RING) for s in samplers}
@@ -375,6 +401,24 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             for tgt, specs in list(hub.expr_specs.items()):
                 hub.set_exprs(tgt, specs)
         return {"settings": new.to_dict(), "chat_restarted": applied}
+
+    @app.get("/api/can")
+    def can_frames(limit: int = 300):
+        """Sampled CAN/FDCAN frames of the robot (rdt.cantap) and the tap statistics. Sampled, not a bus capture."""
+        with hub.lock:
+            return {"frames": list(hub.can)[-min(limit, 1500):], "stats": dict(hub.can_stats)}
+
+    @app.get("/api/sessions/{name}/can")
+    def session_can(name: str):
+        p = hub.sessions_dir / name
+        if "/" in name or "\\" in name or ".." in name or not (p / "meta.json").exists():
+            raise HTTPException(404, "no such session")
+        s = open_session(p)
+        out = []
+        for tgt in s.targets:
+            out += [{**f, "target": tgt} for f in s.can(tgt)]
+        out.sort(key=lambda f: f["t"])
+        return {"frames": out[-1500:]}
 
     @app.get("/api/frames")
     def frames(limit: int = 200, source: str = ""):

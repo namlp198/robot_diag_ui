@@ -105,6 +105,11 @@ def build_server(box: ToolBox):
     async def get_frames(args):
         return _text(box.get_frames(args.get("source", ""), args.get("limit", 20)))
 
+    @tool("get_can_frames", "CAN/FDCAN frames sampled on the robot: last received frame and TX FIFO elements (id, data, CANopen-style label, SDO decode) plus tap stats. Sampled by polling, not a full bus capture.",
+          {"type": "object", "properties": {"limit": {"type": "integer"}, "can_id": {"type": "integer"}}})
+    async def get_can_frames(args):
+        return _text(box.get_can_frames(args.get("limit", 30), args.get("can_id")))
+
     @tool("show_chart", "Show a chart in the user's UI. series items: {target, path, as: 'value'|'rate'}.",
           {"type": "object", "properties": {"series": {"type": "array", "items": {"type": "object"}},
                                             "from_s": {"type": "number"}, "to_s": {"type": "number"},
@@ -130,7 +135,7 @@ def build_server(box: ToolBox):
 
     return create_sdk_mcp_server("rdt", tools=[
         get_status, read_latest, get_series, get_log, find_symbols, members, list_sessions, session_summary,
-        get_findings, get_sweep, get_frames, show_chart, annotate, highlight_range, get_view_context])
+        get_findings, get_sweep, get_frames, get_can_frames, show_chart, annotate, highlight_range, get_view_context])
 
 
 async def can_use_tool(tool_name, tool_input, ctx):

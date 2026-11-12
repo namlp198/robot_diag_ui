@@ -91,6 +91,14 @@ class Recorder:
                 self._files[key] = open(self.dir / f"log_{target}.jsonl", "w", encoding="utf-8")
             self._files[key].write(json.dumps({"t": round(t, 6), "line": line}, ensure_ascii=True) + "\n")
 
+    def add_can(self, target: str, t: float, frame: dict):
+        """One sampled CAN frame (rdt.cantap): can_<target>.jsonl, {"t": ..., plus the frame fields}."""
+        with self._lock:
+            key = f"can_{target}"
+            if key not in self._files:
+                self._files[key] = open(self.dir / f"can_{target}.jsonl", "w", encoding="utf-8")
+            self._files[key].write(json.dumps({"t": round(t, 6), **frame}, ensure_ascii=True) + "\n")
+
     def add_event(self, t: float, kind: str, text: str):
         with self._lock:
             self._events.write(json.dumps({"t": round(t, 6), "kind": kind, "text": text},
@@ -144,6 +152,10 @@ class Session:
         if not p.exists():
             return []
         return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x]
+
+    def can(self, target: str) -> list[dict]:
+        p = self.path / f"can_{target}.jsonl"
+        return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x] if p.exists() else []
 
     def events(self) -> list[dict]:
         p = self.path / "events.jsonl"
