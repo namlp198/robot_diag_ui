@@ -10,6 +10,10 @@
 
 ## Latest change
 
+- D1 slice: `rdt/backend.py` (read-only pyOCD `Probe`), `rdt watch <target> <paths> [--hz] [--count]` (CSV),
+  `tests/test_backend.py` (skips without probe/ELF), `pyocd` as the `probe` extra. Checked on both boards: 5 samples of
+  `s_lora_rx.filter.stats.lost` (0, robot) and `s_tx` (remote); check.ps1: 4 passed.
+
 - Spike S1 done: pyOCD vs CubeProgrammer API read rates, decision `decisions/0001_probe_backend.md`
   (pyOCD for reads). Scripts: `scripts/s1_bench.py`, `scripts/s1_bench_cube.py`.
 - `targets.yaml`: both probe serials updated (user confirmed the connected pair is the right one).
@@ -25,4 +29,4 @@
 
 ## Next
 
-D1 core: `rdt` backend module on pyOCD (threads, one session per probe), then watch/record. Open S3 and S4.
+D1 remainder: recorder (write/read back a session), VCP log of the remote, then daemon. Open S3 and S4.
