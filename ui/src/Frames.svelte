@@ -46,7 +46,7 @@
   <h2>{$t('fr.inspect')}</h2>
   {#if shown}
     <div class="meta mono">
-      {$t('fr.src.' + shown.source)} · {shown.type_name} (0x{hex2(shown.type)}) · VER {shown.version} · LINK_ID 0x{shown.link_id.toString(16).toUpperCase().padStart(4, '0')} · SEQ {shown.seq} · LEN {shown.length} · t={shown.t.toFixed(3)} s ·
+      {$t('fr.src.' + shown.source)} · {shown.type_name} (0x{hex2(shown.type_id)}) · VER {shown.version} · LINK_ID 0x{shown.link_id.toString(16).toUpperCase().padStart(4, '0')} · SEQ {shown.seq} · LEN {shown.length} · t={shown.t.toFixed(3)} s ·
       <span class={shown.crc_ok ? 'ok' : 'bad'}>{shown.crc_ok ? $t('fr.crcOk') : $t('fr.crcBad')} 0x{shown.crc.toString(16).toUpperCase().padStart(4, '0')}</span>
       <button class="mini" on:click={() => copy(shown)}>{copied ? $t('fr.copied') : $t('fr.copyHex')}</button>
     </div>

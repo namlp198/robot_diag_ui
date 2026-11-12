@@ -143,7 +143,7 @@ def decode(buf: bytes) -> dict | None:
 def describe(f: Frame) -> dict:
     fields = [("SOF", 0, 2), ("VER", 2, 1), ("TYPE", 3, 1), ("LINK_ID", 4, 2), ("SEQ", 6, 1), ("LEN", 7, 1),
               ("PAYLOAD", 8, f.length), ("CRC", 8 + f.length, 2)]
-    return {"hex": f.raw.hex(), "version": f"{f.version >> 4}.{f.version & 15}", "type": f.type, "type_name": f.type_name,
+    return {"hex": f.raw.hex(), "version": f"{f.version >> 4}.{f.version & 15}", "type_id": f.type, "type_name": f.type_name,  # not "type": the daemon's WebSocket message uses that key
             "link_id": f.link_id, "seq": f.seq, "length": f.length, "crc": f.crc, "crc_ok": f.crc_ok, "size": len(f.raw),
             "fields": [{"name": n, "offset": o, "size": s} for n, o, s in fields if s], "payload": decode_payload(f)}
 

@@ -93,6 +93,23 @@ def test_frames_endpoint_and_session_frames(client, tmp_path):
     assert client.get("/api/frames").json()["frames"] == []
 
 
+def test_live_frames_are_published_as_websocket_frame_messages(tmp_path):
+    """Regression: a frame's own `type` field must not replace the message type ("frame") the UI dispatches on."""
+    from rdt import rcl
+    hub = Hub(sessions_dir=tmp_path)
+    sent = []
+    hub._publish = sent.append
+    body = bytes([0x10, 0x01, 0x34, 0x12, 5, 7]) + bytes([8, 128, 128, 255, 255, 255, 255])
+    f = rcl.SOF + body + rcl.crc16(body).to_bytes(2, "little")
+    hub.columns = {"remote": ["s_tx.out.frame", "s_tx.out.frame_len"]}
+    hub.ring = {"remote": __import__("collections").deque()}
+    hub.capture = rcl.FrameCapture(hub.columns)
+    hub.on_sample("remote", 1.0, [f.ljust(58, b"\0").hex(), len(f)])
+    msgs = [m for m in sent if m["type"] == "frame"]
+    assert len(msgs) == 1 and msgs[0]["source"] == "remote_tx" and msgs[0]["seq"] == 5 and msgs[0]["type_name"] == "CONTROL"
+    assert [m["type"] for m in sent] == ["sample", "frame"]
+
+
 def test_symbols_search(client):
     elf = (ROOT / load_targets()["robot"]["elf"]).resolve()
     if not elf.exists():
