@@ -6,6 +6,7 @@ Host and Origin headers must be local (guards against DNS-rebinding from a web p
 from __future__ import annotations
 
 import asyncio
+import copy
 import threading
 from contextlib import asynccontextmanager
 import time
@@ -18,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .cli import ROOT, elf_paths, load_targets, open_symbols
-from . import (analyzers, cantap as cantap_mod, cubecli as cubecli_mod, exprs as exprs_mod, flash as flash_mod, rcl as rcl_mod,
+from . import (analyzers, cantap as cantap_mod, cubecli as cubecli_mod, envcheck as envcheck_mod, firmware as firmware_mod, exprs as exprs_mod, flash as flash_mod, rcl as rcl_mod,
                reference as reference_mod, settings as settings_mod, sweep as sweep_mod)
 from .recorder import Recorder, list_sessions, open_session
 from .sampler import Sampler
@@ -48,6 +49,7 @@ class WatchRequest(BaseModel):
 class FlashRequest(BaseModel):
     target: str
     image: str
+    address: int | None = None   # start address of a .bin (default: the registered one, else the start of the board's flash)
     confirm: str = ""
     motors_safe: bool = False
 
@@ -71,7 +73,8 @@ class RecordRequest(BaseModel):
 
 class Hub:
     def __init__(self, sessions_dir: Path | None = None):
-        self.targets = load_targets()
+        self.base_targets = load_targets()      # targets.yaml as written
+        self.targets = copy.deepcopy(self.base_targets)  # with the ELF choices of Settings applied (apply_settings)
         self.sessions_dir = sessions_dir or ROOT / "sessions"
         self.lock = threading.RLock()
         self.loop: asyncio.AbstractEventLoop | None = None
@@ -90,6 +93,7 @@ class Hub:
         self.chat = None  # ChatSession, created on first use (needs claude_agent_sdk)
         self.box = None
         self.settings = settings_mod.Store(self.sessions_dir / "settings.json")
+        self.apply_settings()
         self.exprs: dict[str, list] = {}          # live expressions per target (rdt.exprs.Expr)
         self.expr_specs: dict[str, list] = {}     # as sent by the UI (including refused ones)
         self.expr_info: dict[str, list] = {}      # resolved info or error per spec
@@ -98,6 +102,34 @@ class Hub:
         self.capture: rcl_mod.FrameCapture | None = None
         self.can: deque = deque(maxlen=1500)      # sampled CAN frames (rdt.cantap), newest last
         self.can_stats: dict[str, dict] = {}      # target -> tap statistics
+
+    def apply_settings(self):
+        """Settings that change what the daemon uses: the ELF files per board and the STM32_Programmer_CLI path. Takes effect at
+        the next "Start reading" (samplers resolve symbols when they are created)."""
+        s = self.settings.current
+        targets = copy.deepcopy(self.base_targets)
+        for name, pick in s.active_elf.items():
+            if name in targets:
+                if pick.get("symbols") and Path(pick["symbols"]).is_file():
+                    targets[name]["elf"] = str(Path(pick["symbols"]))
+                if pick.get("image") and Path(pick["image"]).is_file():
+                    targets[name]["image_elf"] = str(Path(pick["image"]))
+        self.targets = targets
+        cli = Path(s.cube_cli_path) if s.cube_cli_path else None
+        if cli is None or not cli.is_file():
+            found = envcheck_mod.cube_candidates(None)
+            cli = found[0][0] if found else flash_mod.CUBE_CLI
+        flash_mod.CUBE_CLI = cli
+
+    def registered_firmware(self, target: str) -> list[tuple[Path, int | None]]:
+        """Firmware files the user registered for `target` in Settings: (resolved path, .bin address)."""
+        out = []
+        for e in self.settings.current.firmware_files.get(target, []):
+            try:
+                out.append((Path(e["path"]).resolve(), e.get("address")))
+            except OSError:
+                pass
+        return out
 
     # --- fan-out (called from sampler threads) -------------------------------------------------
     def _publish(self, msg: dict):
@@ -352,46 +384,66 @@ def create_app(hub: Hub | None = None) -> FastAPI:
 
     auth_cache: dict = {"t": 0.0, "v": None}
 
-    def auth_status() -> dict:
-        """Login state of the Claude Code bundled with the SDK (`claude auth status`), cached for 30 s."""
-        import json as _json
-        import subprocess
+    def auth_status(fresh: bool = False) -> dict:
+        """Login state of the Claude Code bundled with the SDK (`claude auth status`), cached for 30 s unless `fresh`."""
         now = time.time()
-        if auth_cache["v"] is not None and now - auth_cache["t"] < 30:
+        if not fresh and auth_cache["v"] is not None and now - auth_cache["t"] < 30:
             return auth_cache["v"]
-        try:
-            import claude_agent_sdk
-        except ImportError:
-            v = {"sdk": False, "logged_in": None}
-        else:
-            exe = Path(claude_agent_sdk.__file__).parent / "_bundled" / "claude.exe"
-            v = {"sdk": True, "logged_in": None}
-            if exe.exists():
-                try:
-                    r = subprocess.run([str(exe), "auth", "status"], capture_output=True, text=True, timeout=15)
-                    v["logged_in"] = bool(_json.loads(r.stdout).get("loggedIn"))
-                except Exception:
-                    v["logged_in"] = None
+        v = envcheck_mod.claude_status()
         auth_cache.update(t=now, v=v)
         return v
-
     @app.get("/api/chat/info")
     async def chat_info():
         """Is the chat usable (SDK installed, logged in) and with which settings. No model name is shown in the UI by default."""
-        a = await asyncio.to_thread(auth_status)
+        a = await asyncio.to_thread(auth_status, False)
         return {**a, "busy": bool(hub.chat and hub.chat.busy), "settings": hub.settings.current.to_dict()}
 
     @app.get("/api/settings")
     def get_settings():
         return {"settings": hub.settings.current.to_dict(), "models": settings_mod.MODELS, "efforts": settings_mod.EFFORTS,
-                "core_registers": [{"name": n, "address": a, "type": t, "meaning": m} for n, a, t, m in exprs_mod.CORE_REGISTERS]}
+                "core_registers": [{"name": n, "address": a, "type": t, "meaning": m} for n, a, t, m in exprs_mod.CORE_REGISTERS],
+                "targets": {n: {"mcu": t.get("mcu"), "flash_range": t.get("flash_range"),
+                                "elf": str((ROOT / t["elf"]).resolve()),
+                                "image_elf": str((ROOT / t["image_elf"]).resolve()) if t.get("image_elf") else None}
+                            for n, t in hub.base_targets.items()}}
+
+    def _check_file_settings(changes: dict):
+        """Everything the user adds in Settings is looked at before it is stored: board names, files that exist and what they are."""
+        for key in ("elf_files", "active_elf", "firmware_files"):
+            if key in changes and isinstance(changes[key], dict):
+                for t in changes[key]:
+                    if t not in hub.targets:
+                        raise HTTPException(400, f"{key}: unknown board {t!r}")
+        for t, lst in (changes.get("elf_files") or {}).items():
+            for p in lst:
+                i = firmware_mod.inspect(p)
+                if i.get("error") or i.get("kind") != "elf":
+                    raise HTTPException(400, f"{p}: {i.get('error') or 'not an ELF file'}")
+        for t, pick in (changes.get("active_elf") or {}).items():
+            for role, p in pick.items():
+                if p:
+                    i = firmware_mod.inspect(p)
+                    if i.get("error") or i.get("kind") != "elf":
+                        raise HTTPException(400, f"{p}: {i.get('error') or 'not an ELF file'}")
+                    if role == "symbols" and not i.get("dwarf"):
+                        raise HTTPException(400, f"{p}: no DWARF debug info, so it cannot name variables (use it as the image ELF instead)")
+        for t, lst in (changes.get("firmware_files") or {}).items():
+            for e in lst:
+                i = firmware_mod.inspect(e.get("path", ""))
+                if i.get("error") or i.get("kind") is None:
+                    raise HTTPException(400, f"{e.get('path')}: {i.get('error') or 'not a firmware file'}")
+        cp = changes.get("cube_cli_path")
+        if cp and envcheck_mod.cube_version(Path(cp)) is None:
+            raise HTTPException(400, f"{cp}: not a working STM32_Programmer_CLI")
 
     @app.put("/api/settings")
     async def put_settings(changes: dict):
+        await asyncio.to_thread(_check_file_settings, changes)
         try:
             new = hub.settings.update(changes)
         except settings_mod.SettingsError as e:
             raise HTTPException(400, str(e))
+        hub.apply_settings()
         applied = False
         if hub.chat is not None and not hub.chat.busy:  # next question starts a fresh conversation with the new settings
             await hub.chat.close()
@@ -401,6 +453,37 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             for tgt, specs in list(hub.expr_specs.items()):
                 hub.set_exprs(tgt, specs)
         return {"settings": new.to_dict(), "chat_restarted": applied}
+
+    @app.get("/api/env/cube")
+    async def env_cube():
+        return await asyncio.to_thread(envcheck_mod.cube_status, hub.settings.current.cube_cli_path)
+
+    @app.get("/api/env/stlink")
+    async def env_stlink():
+        serials = {t["probe_serial"]: n for n, t in hub.targets.items()}
+        return await asyncio.to_thread(envcheck_mod.scan_stlink, serials)
+
+    @app.get("/api/env/claude")
+    async def env_claude(fresh: bool = False):
+        return await asyncio.to_thread(auth_status, fresh)
+
+    @app.post("/api/env/claude/login")
+    async def env_claude_login():
+        """Opens `claude auth login` of the bundled Claude Code in its own console (the browser login happens there)."""
+        r = await asyncio.to_thread(envcheck_mod.start_claude_login)
+        if not r["started"]:
+            raise HTTPException(501, r["error"])
+        auth_cache["v"] = None
+        return r
+
+    @app.post("/api/dialog/open")
+    async def dialog_open(body: dict):
+        """Native file picker on the machine the daemon runs on (this is a local tool). Returns the chosen path or null."""
+        return await asyncio.to_thread(envcheck_mod.pick_file, str(body.get("kind", "")), body.get("initial"))
+
+    @app.post("/api/firmware/inspect")
+    async def firmware_inspect(body: dict):
+        return await asyncio.to_thread(firmware_mod.inspect, str(body.get("path", "")))
 
     @app.get("/api/can")
     def can_frames(limit: int = 300):
@@ -568,8 +651,8 @@ def create_app(hub: Hub | None = None) -> FastAPI:
         cfg = hub.targets[req.target]
         img = Path(req.image)
         img = (img if img.is_absolute() else ROOT / img).resolve()
-        if not img.is_relative_to(ROOT.parent):
-            raise HTTPException(400, "image must be inside the workspace repositories folder")
+        if not img.is_relative_to(ROOT.parent) and img not in [p for p, _a in hub.registered_firmware(req.target)]:
+            raise HTTPException(400, "image must be inside the workspace repositories folder or registered for this board in Settings")
         return cfg, img
 
     def _flash_plan(req: FlashRequest):
@@ -584,8 +667,11 @@ def create_app(hub: Hub | None = None) -> FastAPI:
         except BackendError:
             read = None
         try:
+            reg = hub.registered_firmware(req.target)
+            addr = req.address if req.address is not None else next((a for p, a in reg if p == img), None)
             return flash_mod.plan(req.target, cfg, img, ROOT, read,
-                                  lambda s: s in list_serials() or probe is not None), cfg
+                                  lambda s: s in list_serials() or probe is not None,
+                                  extra_allowed=[p for p, _a in reg], address=addr), cfg
         except flash_mod.FlashError as e:
             raise HTTPException(400, str(e))
         finally:
@@ -602,7 +688,28 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             files = []
             for g in cfg.get("allowed_images", []):
                 files += glob.glob(_os.path.normpath(str(ROOT / g)))
-            out[name] = sorted(str(Path(f).resolve()) for f in files)
+            files += [str(p) for p, _a in hub.registered_firmware(name)]
+            out[name] = sorted(set(str(Path(f).resolve()) for f in files))
+        return out
+
+    @app.get("/api/flash/files")
+    def flash_files():
+        """Per board: the files the Flash panel offers, with kind, address (.bin) and where the entry comes from."""
+        import glob
+        import os as _os
+        out = {}
+        for name, cfg in hub.targets.items():
+            seen, rows = set(), []
+            for p, a in hub.registered_firmware(name):
+                seen.add(str(p))
+                rows.append({"path": str(p), "kind": firmware_mod.kind_of(p), "address": a, "source": "settings"})
+            for g in cfg.get("allowed_images", []):
+                for f in glob.glob(_os.path.normpath(str(ROOT / g))):
+                    f = str(Path(f).resolve())
+                    if f not in seen:
+                        seen.add(f)
+                        rows.append({"path": f, "kind": "elf", "address": None, "source": "targets.yaml"})
+            out[name] = sorted(rows, key=lambda r: r["path"].lower())
         return out
 
     @app.post("/api/flash/plan")

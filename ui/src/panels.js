@@ -1,4 +1,4 @@
-﻿// What the dashboard shows. Variable paths are resolved by the daemon from the flashed ELF (never offsets).
+// What the dashboard shows. Variable paths are resolved by the daemon from the flashed ELF (never offsets).
 // A stage with no `var` is a part of the chain that has no variable to read yet: it is shown grey, not green.
 
 export const STALE_S = 1.5; // a stage counter that did not change for this long is drawn red

@@ -38,11 +38,17 @@ cd ui; npm install; npm run build; cd ..     # builds ui/dist
 ## Run
 
 ```powershell
-.\scripts\start.ps1              # daemon + UI in its own Edge app window; closing the window stops the daemon
-.\scripts\start.ps1 -Browser     # same, but opens the default browser; stop with Ctrl+C
+.\scripts\start.ps1              # the app in its own native window (rdt app); closing the window stops the daemon
+.\scripts\start.ps1 -Edge        # an Edge app window instead (when pywebview is not installed this is the automatic fallback)
+.\scripts\start.ps1 -Browser     # default browser tab; stop with Ctrl+C
 .\scripts\make_shortcut.ps1      # puts a "Robot Diag" shortcut on the desktop
+.venv\Scripts\rdt app            # the native window directly (pip install -e .[app]: pywebview + the Edge WebView2 runtime)
 .venv\Scripts\rdt serve          # daemon only, UI at http://127.0.0.1:8765
 ```
+
+Settings page: checks that STM32_Programmer_CLI and the ST-LINK driver are present and that Claude is logged in (with a button for
+`claude auth login`), lets you choose the ELF files per board, and register the .elf/.hex/.bin files the Flash panel may program
+(each file belongs to one board). The choices are kept in `sessions/settings.json`.
 
 The daemon listens on 127.0.0.1 only and owns the probes: close CubeIDE/CubeProgrammer sessions on the same probes and
 run one daemon at a time. Other commands: `rdt watch|record|replay|analyze|sweep|flash-plan|resolve` (see `rdt --help`).

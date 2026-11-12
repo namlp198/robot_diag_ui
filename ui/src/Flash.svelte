@@ -13,15 +13,21 @@
   let result = null;
   let busy = false;
 
-  onMount(async () => {
-    try { cands = await (await fetch('/api/flash/candidates')).json(); } catch { cands = {}; }
+  async function loadFiles() {
+    try { cands = await (await fetch('/api/flash/files')).json(); } catch { cands = {}; }
+  }
+  onMount(() => {
+    loadFiles();
+    window.addEventListener('rdt-files-changed', loadFiles); // Settings added or removed a firmware file
+    return () => window.removeEventListener('rdt-files-changed', loadFiles);
   });
   $: list = cands[target] ?? [];
-  $: if (!list.includes(image)) image = list[0] ?? '';
+  $: if (!list.some((f) => f.path === image)) image = list[0]?.path ?? '';
+  $: sel = list.find((f) => f.path === image) ?? null;
   $: stopped = !$status.running;
 
   async function call(path, extra = {}) {
-    const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ target, image, ...extra }) });
+    const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ target, image, address: sel?.address ?? null, ...extra }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail ?? r.statusText);
     return j;
@@ -44,7 +50,7 @@
   <p class="muted small">{$t('flash.warn')}</p>
   <div class="bar">
     <select bind:value={target}>{#each Object.keys(cands) as t}<option value={t}>{t}</option>{/each}</select>
-    <select bind:value={image}>{#each list as f}<option value={f}>{name(f)}</option>{/each}</select>
+    <select bind:value={image}>{#each list as f}<option value={f.path}>{(f.kind ?? '').toUpperCase()} · {name(f.path)}{f.kind === 'bin' ? ' @ ' + (f.address === null || f.address === undefined ? '0x08000000?' : '0x' + f.address.toString(16).toUpperCase()) : ''}</option>{/each}</select>
     <button on:click={dry} disabled={!stopped || !image || busy}>{$t('flash.dry')}</button>
     {#if !stopped}<span class="muted">{$t('flash.stopFirst')}</span>{/if}
   </div>

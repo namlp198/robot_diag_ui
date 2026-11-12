@@ -128,6 +128,68 @@ def test_can_frames_message_type_and_session_file(tmp_path):
     assert hub.can[-1]["t"] == 1.5
 
 
+def test_settings_firmware_and_elf_files_are_checked_and_applied(client, tmp_path):
+    import struct
+    b = tmp_path / "app.bin"
+    b.write_bytes(bytes(range(64)))
+    h = tmp_path / "app.hex"
+    body = bytes([4, 0, 0, 0, 1, 2, 3, 4])
+    h.write_text(":020000040800F2\n:" + (body + bytes([(-sum(body)) & 0xFF])).hex().upper() + "\n:00000001FF\n")
+    ok = client.put("/api/settings", json={"firmware_files": {"remote": [{"path": str(b), "address": 0x08020000}, {"path": str(h), "address": None}]}})
+    assert ok.status_code == 200 and len(ok.json()["settings"]["firmware_files"]["remote"]) == 2
+    files = client.get("/api/flash/files").json()["remote"]
+    reg = {f["path"]: f for f in files if f["source"] == "settings"}
+    assert reg[str(b.resolve())]["kind"] == "bin" and reg[str(b.resolve())]["address"] == 0x08020000 and reg[str(h.resolve())]["kind"] == "hex"
+    assert str(b.resolve()) in client.get("/api/flash/candidates").json()["remote"]
+    assert not any(f["source"] == "settings" for f in client.get("/api/flash/files").json()["robot"])  # files belong to one board
+    # refused: unknown board, missing file, wrong type, odd address, ELF without DWARF used for symbols
+    assert client.put("/api/settings", json={"firmware_files": {"nope": []}}).status_code == 400
+    assert client.put("/api/settings", json={"firmware_files": {"remote": [{"path": str(tmp_path / "missing.bin"), "address": None}]}}).status_code == 400
+    txt = tmp_path / "x.txt"
+    txt.write_text("x")
+    assert client.put("/api/settings", json={"firmware_files": {"remote": [{"path": str(txt), "address": None}]}}).status_code == 400
+    assert client.put("/api/settings", json={"firmware_files": {"remote": [{"path": str(b), "address": 0x08020002}]}}).status_code == 400
+    assert client.put("/api/settings", json={"elf_files": {"remote": [str(b)]}}).status_code == 400  # a .bin is not an ELF
+    assert client.put("/api/settings", json={"cube_cli_path": str(txt)}).status_code == 400
+    # the plan accepts a registered file (probe-less: other checks fail, but the allow-list check passes) and refuses an unregistered one
+    plan = client.post("/api/flash/plan", json={"target": "remote", "image": str(b)}).json()
+    assert {c["name"]: c["ok"] for c in plan["checks"]}["image_allowed_for_target"] is True and plan["kind"] == "bin" and "0x08020000" in plan["command"]
+    other = tmp_path / "other.bin"
+    other.write_bytes(b"\x00" * 16)
+    r = client.post("/api/flash/plan", json={"target": "remote", "image": str(other)})
+    assert r.status_code == 400 and "registered" in r.json()["detail"]
+    # removing the registration removes the permission
+    client.put("/api/settings", json={"firmware_files": {"remote": []}})
+    assert client.post("/api/flash/plan", json={"target": "remote", "image": str(b)}).status_code == 400
+
+
+def test_active_elf_overrides_the_target_elf(client):
+    real = (ROOT / load_targets()["remote"]["elf"]).resolve()
+    if not real.exists():
+        pytest.skip("remote ELF not built")
+    r = client.put("/api/settings", json={"elf_files": {"remote": [str(real)]}, "active_elf": {"remote": {"symbols": str(real), "image": None}}})
+    assert r.status_code == 200
+    s = client.get("/api/settings").json()
+    assert s["targets"]["remote"]["elf"] == str(real) and s["settings"]["active_elf"]["remote"]["symbols"] == str(real)
+
+
+def test_env_endpoints_use_the_envcheck_module(client, monkeypatch):
+    from rdt import envcheck
+    monkeypatch.setattr(envcheck, "cube_status", lambda configured, runner=None: {"ready": True, "active": {"path": "x", "version": "2.20.0", "source": "default install"}, "candidates": [], "pinned": "2.20.0"})
+    monkeypatch.setattr(envcheck, "scan_stlink", lambda targets=None, runner=None: {"ready": False, "any": False, "probes": [], "packages": [], "reason": "no_probe", "seen_targets": targets})
+    monkeypatch.setattr(envcheck, "claude_status", lambda runner=None: {"sdk": True, "logged_in": False})
+    started = []
+    monkeypatch.setattr(envcheck, "start_claude_login", lambda popen=None: started.append(1) or {"started": True})
+    monkeypatch.setattr(envcheck, "pick_file", lambda kind, initial=None, runner=None: {"path": f"C:/picked/{kind}.elf"})
+    assert client.get("/api/env/cube").json()["ready"] is True
+    st = client.get("/api/env/stlink").json()
+    assert st["reason"] == "no_probe" and set(st["seen_targets"].values()) >= {"robot", "remote"}
+    assert client.get("/api/env/claude?fresh=1").json()["logged_in"] is False
+    assert client.get("/api/chat/info").json()["logged_in"] is False
+    assert client.post("/api/env/claude/login").json() == {"started": True} and started
+    assert client.post("/api/dialog/open", json={"kind": "elf"}).json()["path"] == "C:/picked/elf.elf"
+
+
 def test_symbols_search(client):
     elf = (ROOT / load_targets()["robot"]["elf"]).resolve()
     if not elf.exists():

@@ -68,10 +68,12 @@ def chunk_plan(image: list[tuple[int, bytes]], chunks: int = 16, size: int = 64)
     return picks
 
 
-def verify(read: Callable[[int, int], bytes], elf_path: Path, chunks: int = 16, size: int = 64) -> VerifyResult:
+def verify(read: Callable[[int, int], bytes], elf_path: Path, chunks: int = 16, size: int = 64,
+           image: list[tuple[int, bytes]] | None = None) -> VerifyResult:
+    """Compare flash chunks with the ELF, or with `image` (blocks from rdt.firmware.load_image: .hex or .bin files)."""
     res = VerifyResult()
     try:
-        plan = chunk_plan(flash_image(elf_path), chunks, size)
+        plan = chunk_plan(image if image is not None else flash_image(elf_path), chunks, size)
         for addr, expect in plan:
             res.checked += 1
             if read(addr, len(expect)) != expect:

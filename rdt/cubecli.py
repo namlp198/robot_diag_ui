@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
-from .flash import CUBE_CLI
+from . import flash
 
 SRAM = (0x20000000, 0x3FFFFFFF)  # DTCM/AXI/SRAM1-4 on the H755, SRAM on the F446
 MAX_READ = 4096
@@ -56,17 +56,17 @@ def build(command: str, cfg: dict | None, address=None, size=None) -> list[str]:
         raise CubeCliError(f"unknown command {command!r}; allowed: {', '.join(COMMANDS)}")
     needs_target, needs_mem = COMMANDS[command]
     if command == "list":
-        return [str(CUBE_CLI), "-l", "st-link"]
+        return [str(flash.CUBE_CLI), "-l", "st-link"]
     if needs_target and cfg is None:
         raise CubeCliError("this command needs a target")
     connect = ["-c", "port=SWD", f"sn={cfg['probe_serial']}", "mode=HOTPLUG"]
     if command == "info":
-        return [str(CUBE_CLI), *connect]
+        return [str(flash.CUBE_CLI), *connect]
     if command == "ob_display":
-        return [str(CUBE_CLI), *connect, "-ob", "displ"]
+        return [str(flash.CUBE_CLI), *connect, "-ob", "displ"]
     a, n = _int(address, "address"), _int(size, "size")
     check_read(cfg, a, n)
-    return [str(CUBE_CLI), *connect, "-r32", f"0x{a:08X}", str(n)]
+    return [str(flash.CUBE_CLI), *connect, "-r32", f"0x{a:08X}", str(n)]
 
 
 def run(args: list[str], runner: Callable = subprocess.run, timeout: int = 60) -> dict:

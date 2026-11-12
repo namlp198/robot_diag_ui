@@ -9,8 +9,10 @@ Gates, all required for `run`:
      cannot be cut while flashing);
   4. the daemon is not sampling (the probe is needed exclusively; the caller stops it first).
 Claude has no flash tool; its permission policy denies everything outside `mcp__rdt__*`, and none of those flashes.
+Images: .elf, .hex (addresses inside) and .bin (needs a start address, default the start of the board's flash). Besides the
+`allowed_images` globs of targets.yaml, a file is allowed when the user registered it for that board in Settings.
 After programming, the flash content is compared with the image (rdt.verify) and the result is appended to
-`sessions/flash_log.jsonl`. Not implemented on purpose: .hex/.bin images, paired flashing, CM4.
+`sessions/flash_log.jsonl`. Not implemented on purpose: paired flashing, CM4.
 Tests use a fake runner and probe reader; nothing here has been run against a real board.
 """
 from __future__ import annotations
@@ -26,8 +28,10 @@ from typing import Callable
 
 from elftools.elf.elffile import ELFFile
 
+from . import firmware
 from .verify import verify
 
+# The tool used for programming. Settings can point it elsewhere (the daemon sets this at start and on change).
 CUBE_CLI = Path(r"C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe")
 EM_ARM = 40
 
@@ -55,6 +59,8 @@ class FlashPlan:
     confirm: str = ""
     needs_motors_safe: bool = False
     already_flashed: bool = False
+    kind: str = "elf"                  # elf | hex | bin
+    address: int | None = None         # start address of a .bin (it has none inside)
 
     @property
     def ok(self) -> bool:
@@ -89,27 +95,40 @@ def _glob_match(path: Path, pattern: Path) -> bool:
 
 
 def plan(target: str, cfg: dict, image: Path, base: Path, read: Callable[[int, int], bytes] | None,
-         attached: Callable[[str], bool]) -> FlashPlan:
-    """Read-only. `read` reads target memory (None if the probe cannot be opened); `attached(serial)` tells if the probe is listed."""
+         attached: Callable[[str], bool], extra_allowed: list[Path] | None = None, address: int | None = None) -> FlashPlan:
+    """Read-only. `read` reads target memory (None if the probe cannot be opened); `attached(serial)` tells if the probe is listed.
+    `extra_allowed`: firmware files the user registered for this target in Settings (a deliberate act in the UI; the chat
+    has no tool for it). `address`: where a .bin goes (default: the start of the target's flash)."""
     image = Path(image).resolve()
     checks: list[Check] = []
-    if image.suffix.lower() != ".elf" or not image.is_file():
-        raise FlashError("image must be an existing .elf file (.hex/.bin are not supported)")
-    p = FlashPlan(target, str(image), _sha256(image), image.stat().st_size, [], needs_motors_safe=bool(cfg.get("needs_motors_safe")))
+    kind = firmware.kind_of(image)
+    if kind is None or not image.is_file():
+        raise FlashError("image must be an existing .elf, .hex or .bin file")
+    p = FlashPlan(target, str(image), _sha256(image), image.stat().st_size, [], needs_motors_safe=bool(cfg.get("needs_motors_safe")), kind=kind)
 
     allowed = [Path(__import__("os").path.normpath(base / g)) for g in cfg.get("allowed_images", [])]  # `base`: the dir targets.yaml paths are relative to
-    ok_img = any(_glob_match(image, g) for g in allowed)
+    registered = any(image == Path(x).resolve() for x in (extra_allowed or []))
+    ok_img = registered or any(_glob_match(image, g) for g in allowed)
     checks.append(Check("image_allowed_for_target", ok_img,
-                        "matches targets.yaml allowed_images" if ok_img
-                        else f"{image.name} is not in allowed_images for {target}: {cfg.get('allowed_images')}"))
+                        ("registered in Settings for this board" if registered else "matches targets.yaml allowed_images") if ok_img
+                        else f"{image.name} is not registered for {target} (Settings > firmware files) and not in allowed_images: {cfg.get('allowed_images')}"))
+    blocks: list[tuple[int, bytes]] | None = None
     try:
-        p.segments = elf_segments(image)
         lo, hi = cfg["flash_range"]
+        if kind == "bin":
+            p.address = address if address is not None else lo
+            if p.address % 4:
+                raise FlashError("a .bin start address must be a multiple of 4")
+        if kind == "elf":
+            p.segments = elf_segments(image)
+        else:
+            blocks = firmware.load_image(image, p.address)
+            p.segments = [(a, len(d)) for a, d in blocks]
         bad = [(a, n) for a, n in p.segments if not (lo <= a and a + n - 1 <= hi)]
         checks.append(Check("image_inside_flash_range", not bad and bool(p.segments),
                             f"segments {[(hex(a), n) for a, n in p.segments]} within 0x{lo:08X}..0x{hi:08X}" if not bad
                             else f"segments outside the target's flash: {[(hex(a), n) for a, n in bad]}"))
-    except FlashError as e:
+    except (FlashError, firmware.FirmwareError) as e:
         checks.append(Check("image_inside_flash_range", False, str(e)))
 
     checks.append(Check("probe_attached", attached(cfg["probe_serial"]), cfg["probe_serial"]))
@@ -120,12 +139,13 @@ def plan(target: str, cfg: dict, image: Path, base: Path, read: Callable[[int, i
             dev = int.from_bytes(read(cfg["idcode_addr"], 4), "little") & 0xFFF
             checks.append(Check("board_dev_id", dev == cfg["dev_id"], f"read 0x{dev:03X}, expected 0x{cfg['dev_id']:03X} ({cfg.get('mcu')})"))
             if p.segments:
-                p.already_flashed = verify(read, image).ok
+                p.already_flashed = (verify(read, image) if blocks is None else verify(read, image, image=blocks)).ok
         except Exception as e:  # fail closed: an unreadable board is a failed check
             checks.append(Check("board_dev_id", False, f"read failed: {e}"))
     p.checks = checks
     p.confirm = f"FLASH {target} {p.sha256[:8]}"
-    p.command = [str(CUBE_CLI), "-c", "port=SWD", f"sn={cfg['probe_serial']}", "mode=NORMAL", "-w", str(image), "-v", "-rst"]
+    p.command = [str(CUBE_CLI), "-c", "port=SWD", f"sn={cfg['probe_serial']}", "mode=NORMAL", "-w", str(image),
+                 *([f"0x{p.address:08X}"] if kind == "bin" else []), "-v", "-rst"]
     return p
 
 
@@ -148,7 +168,10 @@ def run(p: FlashPlan, cfg: dict, confirm: str, motors_safe: bool, repo_root: Pat
     if ok and read_after is not None:
         try:
             with read_after() as probe:  # a context manager (e.g. rdt.backend.Probe): must release the probe
-                verified = verify(probe.read, Path(p.image)).ok
+                if p.kind == "elf":
+                    verified = verify(probe.read, Path(p.image)).ok
+                else:
+                    verified = verify(probe.read, Path(p.image), image=firmware.load_image(Path(p.image), p.address)).ok
         except Exception:
             verified = False
     result = {"target": p.target, "image": p.image, "sha256": p.sha256, "started_utc": started,

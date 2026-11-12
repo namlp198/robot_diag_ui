@@ -1,6 +1,8 @@
 # Start robot_diag_ui: run the daemon (127.0.0.1 only), open the UI in its own app window, stop the daemon when the window closes.
-# Usage: .\scripts\start.ps1 [-Port 8765] [-Browser]   (-Browser: open in the default browser instead; then stop with Ctrl+C)
-param([int]$Port = 8765, [switch]$Browser)
+# Default: a native window (`rdt app`, needs pywebview: pip install -e .[app]); without pywebview an Edge app window.
+# Usage: .\scripts\start.ps1 [-Port 8765] [-Browser] [-Edge]
+#   -Browser: open in the default browser instead (stop with Ctrl+C); -Edge: force the Edge app window.
+param([int]$Port = 8765, [switch]$Browser, [switch]$Edge)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $py = Join-Path $root ".venv\Scripts\python.exe"
@@ -19,6 +21,16 @@ if ($running) {
         Start-Sleep -Seconds 1
         $running = $false
     }
+}
+# Native window (pywebview): `rdt app` runs the daemon itself when none is running and stops it when the window closes.
+$native = (-not $Browser) -and (-not $Edge)
+if ($native) {
+    & $py -I -c "import webview" 2>$null
+    $native = ($LASTEXITCODE -eq 0)
+}
+if ($native) {
+    & $py -I -m rdt.cli app --port $Port
+    exit $LASTEXITCODE
 }
 $daemon = $null
 if (-not $running) {

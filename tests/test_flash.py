@@ -42,11 +42,60 @@ def test_failed_checks_refuse_plan(kw, failed):
     assert not p.ok and failed in [c.name for c in p.checks if not c.ok]
 
 
-def test_only_elf_files(tmp_path):
-    f = tmp_path / "x.bin"
-    f.write_bytes(b"\0" * 8)
-    with pytest.raises(FlashError, match="elf"):
-        mk(image=f)
+def test_only_known_firmware_file_types(tmp_path):
+    for name in ("x.txt", "x.zip", "x"):
+        f = tmp_path / name
+        f.write_bytes(b"\0" * 8)
+        with pytest.raises(FlashError, match="elf, .hex or .bin"):
+            mk(image=f)
+
+
+def hex_record(addr, data, typ=0):
+    b = bytes([len(data), addr >> 8, addr & 0xFF, typ]) + bytes(data)
+    return ":" + (b + bytes([(-sum(b)) & 0xFF])).hex().upper()
+
+
+def write_hex(path, base, data):
+    lines = [hex_record(0, base.to_bytes(4, "big")[:2], 4), hex_record(base & 0xFFFF, data), ":00000001FF"]
+    path.write_text("\n".join(lines) + "\n")
+
+
+def test_unregistered_bin_or_hex_is_refused_registered_one_is_planned(tmp_path):
+    b = tmp_path / "app.bin"
+    b.write_bytes(bytes(range(64)))
+    p = mk(image=b)
+    assert not p.ok and "image_allowed_for_target" in [c.name for c in p.checks if not c.ok]
+    p = flash.plan("remote", CFG, b, ROOT, board(), lambda s: True, extra_allowed=[b])
+    assert p.ok and p.kind == "bin" and p.address == 0x08000000
+    assert p.command[-4:] == [str(b), "0x08000000", "-v", "-rst"] or p.command[p.command.index("-w") + 2] == "0x08000000"
+    p = flash.plan("remote", CFG, b, ROOT, board(), lambda s: True, extra_allowed=[b], address=0x08020000)
+    assert p.ok and "0x08020000" in p.command
+    h = tmp_path / "app.hex"
+    write_hex(h, 0x08000000, bytes(range(32)))
+    p = flash.plan("remote", CFG, h, ROOT, board(), lambda s: True, extra_allowed=[h])
+    assert p.ok and p.kind == "hex" and p.segments == [(0x08000000, 32)] and "0x" not in " ".join(p.command[p.command.index("-w") + 2:])
+
+
+def test_bin_and_hex_outside_flash_or_misaligned_fail(tmp_path):
+    b = tmp_path / "a.bin"
+    b.write_bytes(b"\x01" * 64)
+    far = flash.plan("remote", CFG, b, ROOT, board(), lambda s: True, extra_allowed=[b], address=0x08100000)
+    assert not far.ok and "image_inside_flash_range" in [c.name for c in far.checks if not c.ok]
+    odd = flash.plan("remote", CFG, b, ROOT, board(), lambda s: True, extra_allowed=[b], address=0x08000002)
+    assert not odd.ok
+    h = tmp_path / "bad.hex"
+    h.write_text(":020000040800F2\n:04000000DEADBEEF00\n:00000001FF\n")  # wrong checksum
+    assert not flash.plan("remote", CFG, h, ROOT, board(), lambda s: True, extra_allowed=[h]).ok
+
+
+def test_bin_flash_is_verified_against_its_own_bytes(tmp_path):
+    from rdt import firmware
+    b = tmp_path / "a.bin"
+    data = bytes(range(256)) * 2
+    b.write_bytes(data)
+    p = flash.plan("remote", CFG, b, ROOT, lambda a, n: data[a - 0x08000000:a - 0x08000000 + n] if 0x08000000 <= a < 0x08000200 else (0x421).to_bytes(4, "little")[:n], lambda s: True, extra_allowed=[b])
+    assert p.already_flashed is True
+    assert firmware.load_image(b, 0x08000000)[0][0] == 0x08000000
 
 
 def run(p, **kw):
