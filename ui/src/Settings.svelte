@@ -92,13 +92,14 @@
   // ELF files
   const boardName = (n) => $t('elf.for', { name: n, mcu: $status.targets?.[n]?.mcu ?? defaults[n]?.mcu ?? '' });
   $: boards = Object.keys(defaults);
-  function elfList(b) {
-    const d = defaults[b] ?? {};
-    const user = s.elf_files?.[b] ?? [];
+  // `st`/`df` are passed from the template so Svelte sees the dependency and re-renders when settings change.
+  function elfList(b, st = s, df = defaults) {
+    const d = df[b] ?? {};
+    const user = st.elf_files?.[b] ?? [];
     return [...new Set([d.elf, d.image_elf, ...user].filter(Boolean))].map((p) => ({ path: p, builtin: p === d.elf || p === d.image_elf }));
   }
-  const activeSym = (b) => s.active_elf?.[b]?.symbols || defaults[b]?.elf;
-  const activeImg = (b) => s.active_elf?.[b]?.image || defaults[b]?.image_elf;
+  const activeSym = (b, st = s, df = defaults) => st.active_elf?.[b]?.symbols || df[b]?.elf;
+  const activeImg = (b, st = s, df = defaults) => st.active_elf?.[b]?.image || df[b]?.image_elf;
   async function addElf(b, path) {
     path = path?.trim();
     if (!path) return;
@@ -114,7 +115,7 @@
   }
 
   // Firmware files
-  const fwList = (b) => s.firmware_files?.[b] ?? [];
+  const fwList = (b, st = s) => st.firmware_files?.[b] ?? [];
   async function addFw(b) {
     const p = await pick('firmware');
     if (!p) return;
@@ -207,12 +208,12 @@
   {#each boards as b}
     <div class="board">
       <div class="bt">{boardName(b)}</div>
-      {#each elfList(b) as f}
+      {#each elfList(b, s, defaults) as f (f.path)}
         {@const i = info[f.path]}
         <div class="file">
           <div class="radios">
-            <label title={$t('elf.symbols')}><input type="radio" name="sym-{b}" checked={activeSym(b) === f.path} disabled={i && !i.dwarf} on:change={() => setActive(b, 'symbols', f.path)} /> {$t('elf.symbols')}</label>
-            <label title={$t('elf.image')}><input type="radio" name="img-{b}" checked={activeImg(b) === f.path} on:change={() => setActive(b, 'image', f.path)} /> {$t('elf.image')}</label>
+            <label title={$t('elf.symbols')}><input type="radio" name="sym-{b}" checked={activeSym(b, s, defaults) === f.path} disabled={i && !i.dwarf} on:change={() => setActive(b, 'symbols', f.path)} /> {$t('elf.symbols')}</label>
+            <label title={$t('elf.image')}><input type="radio" name="img-{b}" checked={activeImg(b, s, defaults) === f.path} on:change={() => setActive(b, 'image', f.path)} /> {$t('elf.image')}</label>
           </div>
           <div class="fp"><span class="mono" title={f.path}>{base(f.path)}</span> {#if f.builtin}<span class="tag">{$t('elf.default')}</span>{/if}
             {#if i}
@@ -237,7 +238,7 @@
   {#each boards as b}
     <div class="board">
       <div class="bt">{boardName(b)} <span class="muted small">· {$t('fw.forBoard', { name: b })}</span></div>
-      {#each fwList(b) as e}
+      {#each fwList(b, s) as e (e.path)}
         {@const i = info[e.path]}
         <div class="file">
           <div class="fp"><span class="tag k">{(i?.kind ?? '').toUpperCase()}</span> <span class="mono" title={e.path}>{base(e.path)}</span>

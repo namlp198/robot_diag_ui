@@ -487,8 +487,11 @@ def create_app(hub: Hub | None = None) -> FastAPI:
                 for t in changes[key]:
                     if t not in hub.targets:
                         raise HTTPException(400, f"{key}: unknown board {t!r}")
+        cur = hub.settings.current
         for t, lst in (changes.get("elf_files") or {}).items():
             for p in lst:
+                if p in cur.elf_files.get(t, []):
+                    continue  # already stored: a file that has gone missing must not block removing another one
                 i = firmware_mod.inspect(p)
                 if i.get("error") or i.get("kind") != "elf":
                     raise HTTPException(400, f"{p}: {i.get('error') or 'not an ELF file'}")
@@ -502,6 +505,8 @@ def create_app(hub: Hub | None = None) -> FastAPI:
                         raise HTTPException(400, f"{p}: no DWARF debug info, so it cannot name variables (use it as the image ELF instead)")
         for t, lst in (changes.get("firmware_files") or {}).items():
             for e in lst:
+                if e.get("path") in [x["path"] for x in cur.firmware_files.get(t, [])]:
+                    continue
                 i = firmware_mod.inspect(e.get("path", ""))
                 if i.get("error") or i.get("kind") is None:
                     raise HTTPException(400, f"{e.get('path')}: {i.get('error') or 'not a firmware file'}")
