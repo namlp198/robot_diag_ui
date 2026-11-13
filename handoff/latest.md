@@ -2,13 +2,15 @@
 
 ## Date
 
-2026-11-12
+2026-11-13
 
 ## Machine / branch
 
 - Branch: `main`, remote `origin` = `https://github.com/namlp198/robot_diag_ui.git`. Committed locally, not pushed.
 
 ## Latest change
+
+- Code engine (2026-11-13, decision 0011): Settings registers firmware repos (name, folder, board, build command). In the chat header a new conversation can be attached to a repo; `rdt/codeengine.py` + `repo_*` MCP tools in `claude_bridge.py` read/search/edit/build inside the repo only (no shell, no SDK built-ins); every edit, write and firmware registration waits for Approve/Deny in the chat (diff shown, 10 min timeout, Stop denies); `repo_register_firmware` only adds a built image to the board's firmware list, flashing stays the manual gated panel. The chat shows an engine status bar (idle/thinking/reading/editing/building/registering/waiting/error). Also: Settings file lists now re-render at once, and stored files no longer block removing others (pushed as ad52871). `scripts/check.ps1`: 148 passed, 1 skipped. NOT verified: a real Claude session using the repo tools, a real firmware build, the UI in the running app (UI builds with vite; not clicked through).
 
 - Build/deploy guide (2026-11-12): `docs/BUILD_DEPLOY.vi.md` and `.en.md` (setup, run, UI build, exe + installer, silent install, data locations, new-machine checklist, release steps, troubleshooting, command table). `tests/test_packaging.py` checks the guide against the pins, script names and options. The deployment checklist and release step 5 (install on a clean machine) have not been walked through on a clean machine yet.
 

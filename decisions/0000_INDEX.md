@@ -12,3 +12,4 @@
 | 0008 | Native window, environment checks, ELF and firmware files in Settings | Accepted; real .bin/.hex flash not yet run | 2026-11-12 |
 | 0009 | Installable app (PyInstaller folder + Inno Setup) | Accepted; installer built, not yet installed on a clean machine | 2026-11-12 |
 | 0010 | Chat attachments and saved conversations | Accepted; real chat verified on Haiku | 2026-11-12 |
+| 0011 | Code engine: edit and build registered firmware repos from the chat | Accepted; not yet run on a real repo | 2026-11-13 |

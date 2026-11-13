@@ -183,19 +183,26 @@ $owner = New-Object System.Windows.Forms.Form
 $owner.TopMost = $true; $owner.ShowInTaskbar = $false; $owner.StartPosition = 'CenterScreen'; $owner.Opacity = 0
 $owner.Size = New-Object System.Drawing.Size(1, 1)
 $owner.Show()
-$d = New-Object System.Windows.Forms.OpenFileDialog
-$d.Title = 'Select a file'
-$d.Filter = $filters[$env:RDT_DLG_KIND]
-if ($env:RDT_DLG_INITIAL -and (Test-Path -LiteralPath $env:RDT_DLG_INITIAL)) { $d.InitialDirectory = $env:RDT_DLG_INITIAL }
 $path = $null
-if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $path = $d.FileName }
+if ($env:RDT_DLG_KIND -eq 'folder') {
+  $d = New-Object System.Windows.Forms.FolderBrowserDialog
+  $d.Description = 'Select the firmware repository folder'
+  if ($env:RDT_DLG_INITIAL -and (Test-Path -LiteralPath $env:RDT_DLG_INITIAL)) { $d.SelectedPath = $env:RDT_DLG_INITIAL }
+  if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $path = $d.SelectedPath }
+} else {
+  $d = New-Object System.Windows.Forms.OpenFileDialog
+  $d.Title = 'Select a file'
+  $d.Filter = $filters[$env:RDT_DLG_KIND]
+  if ($env:RDT_DLG_INITIAL -and (Test-Path -LiteralPath $env:RDT_DLG_INITIAL)) { $d.InitialDirectory = $env:RDT_DLG_INITIAL }
+  if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $path = $d.FileName }
+}
 $owner.Close()
 @{ path = $path } | ConvertTo-Json -Compress
 """
 
 
 def pick_file(kind: str, initial: str | None = None, runner=subprocess.run) -> dict:
-    if kind not in ("elf", "firmware", "exe"):
+    if kind not in ("elf", "firmware", "exe", "folder"):
         return {"path": None, "error": "bad kind"}
     start = ""
     if initial and Path(initial).exists():

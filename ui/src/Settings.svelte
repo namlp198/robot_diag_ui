@@ -6,7 +6,7 @@
   import { t, lang, theme, localizeError } from './i18n.js';
 
   let models = [], efforts = [];
-  let s = { model: '', effort: null, max_usd: 2, allow_peripheral_reads: false, cube_cli_path: null, elf_files: {}, active_elf: {}, firmware_files: {} };
+  let s = { model: '', effort: null, max_usd: 2, allow_peripheral_reads: false, cube_cli_path: null, elf_files: {}, active_elf: {}, firmware_files: {}, repos: [] };
   let defaults = {}; // board -> { mcu, elf, image_elf } from targets.yaml
   let customModel = false;
   let msg = '', err = '', busy = false;
@@ -129,6 +129,19 @@
     await save({ firmware_files: { ...s.firmware_files, [b]: fwList(b).map((e) => (e.path === path ? { ...e, address: v } : e)) } }, '');
   }
   const addrText = (e) => fwAddr[e.path] ?? (e.address === null || e.address === undefined ? '' : '0x' + e.address.toString(16).toUpperCase().padStart(8, '0'));
+
+  // Firmware repos for the code engine (decision 0011)
+  let repoForm = { name: '', path: '', board: '', build_cmd: '' };
+  let buildEdit = {}; // repo name -> build command being edited
+  const repoList = () => s.repos ?? [];
+  async function browseRepo() { const p = await pick('folder', repoForm.path); if (p) { repoForm.path = p; if (!repoForm.name) repoForm.name = base(p).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40); } }
+  async function addRepo() {
+    const r = { name: repoForm.name.trim(), path: repoForm.path.trim(), board: repoForm.board || null, build_cmd: repoForm.build_cmd.trim() || null };
+    await save({ repos: [...repoList().filter((x) => x.name !== r.name), r] }, '');
+    if (!err) repoForm = { name: '', path: '', board: '', build_cmd: '' };
+  }
+  const removeRepo = (name) => save({ repos: repoList().filter((x) => x.name !== name) }, '');
+  const saveBuild = (name) => save({ repos: repoList().map((x) => (x.name === name ? { ...x, build_cmd: (buildEdit[name] ?? '').trim() || null } : x)) }, '');
 
   const fmtSize = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MiB' : n >= 1024 ? (n / 1024).toFixed(0) + ' KiB' : n + ' B');
   const fmtTime = (s) => new Date(s * 1000).toLocaleString();
@@ -255,6 +268,31 @@
       <div class="addrow"><button on:click={() => addFw(b)}>{$t('fw.add')}</button></div>
     </div>
   {/each}
+
+  <h3>{$t('repo.title')}</h3>
+  <p class="muted small">{$t('repo.intro')}</p>
+  <div class="board">
+    {#each s.repos ?? [] as r (r.name)}
+      <div class="file">
+        <div class="fp"><b>{r.name}</b> <span class="tag">{r.board ?? $t('repo.noBoard')}</span>
+          <div class="muted small mono">{r.path}</div>
+          <div class="addrow"><input class="mono grow" placeholder={$t('repo.build')} value={buildEdit[r.name] ?? r.build_cmd ?? ''} on:input={(ev) => (buildEdit[r.name] = ev.target.value)} />
+            <button class="mini" on:click={() => saveBuild(r.name)}>{$t('repo.saveBuild')}</button></div>
+          {#if !r.build_cmd}<span class="tag bad">{$t('repo.noBuild')}</span>{/if}</div>
+        <button class="mini" title={$t('repo.remove')} on:click={() => removeRepo(r.name)}>✕</button>
+      </div>
+    {:else}<div class="muted small">{$t('repo.none')}</div>{/each}
+    <div class="addrow">
+      <input class="mono" size="14" placeholder={$t('repo.name')} bind:value={repoForm.name} />
+      <input class="mono grow" placeholder={$t('repo.path')} bind:value={repoForm.path} />
+      <button on:click={browseRepo}>{$t('repo.browse')}</button>
+    </div>
+    <div class="addrow">
+      <select bind:value={repoForm.board}><option value="">{$t('repo.noBoard')}</option>{#each boards as b}<option value={b}>{b}</option>{/each}</select>
+      <input class="mono grow" placeholder={$t('repo.build')} bind:value={repoForm.build_cmd} />
+      <button on:click={addRepo} disabled={!repoForm.name.trim() || !repoForm.path.trim()}>{$t('repo.add')}</button>
+    </div>
+  </div>
 
   <h3>{$t('set.chat')}</h3>
   <p class="muted small">{$t('set.engineNote')}</p>

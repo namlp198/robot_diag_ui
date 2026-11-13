@@ -30,12 +30,14 @@ class Settings:
     elf_files: dict = field(default_factory=dict)       # target -> [path]: ELF files the user added (symbols / image)
     active_elf: dict = field(default_factory=dict)      # target -> {"symbols": path|None, "image": path|None}: override of targets.yaml
     firmware_files: dict = field(default_factory=dict)  # target -> [{"path", "address"}]: files the flash panel may program
+    repos: list = field(default_factory=list)           # [{"name", "path", "board", "build_cmd"}]: firmware repos the code engine may edit
 
     def to_dict(self) -> dict:
         return asdict(self)
 
 
 MAX_FILES = 50
+MAX_REPOS = 8
 
 
 def _path(v, what: str) -> str:
@@ -109,6 +111,25 @@ def validate(d: dict) -> Settings:
                 items.append({"path": _path(e.get("path"), f"firmware_files.{t}"), "address": addr})
             out[t] = items
         s.firmware_files = out
+    if "repos" in d:
+        if not isinstance(d["repos"], list) or len(d["repos"]) > MAX_REPOS:
+            raise SettingsError(f"repos: a list of at most {MAX_REPOS} entries")
+        out, names = [], set()
+        for e in d["repos"]:
+            if not isinstance(e, dict) or set(e) - {"name", "path", "board", "build_cmd"}:
+                raise SettingsError("repos: {name, path, board, build_cmd} expected")
+            name = e.get("name")
+            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_\-]{1,40}", name) or name in names:
+                raise SettingsError("repos: name must be unique, 1-40 letters, digits, _ or -")
+            names.add(name)
+            board = e.get("board") or None
+            if board is not None:
+                _targets({board: 0}, "repos.board")
+            cmd = e.get("build_cmd") or None
+            if cmd is not None and (not isinstance(cmd, str) or len(cmd) > 500 or "\x00" in cmd or "\n" in cmd):
+                raise SettingsError("repos: build_cmd must be one line of at most 500 characters")
+            out.append({"name": name, "path": _path(e.get("path"), "repos.path"), "board": board, "build_cmd": cmd})
+        s.repos = out
     return s
 
 

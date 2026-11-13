@@ -8,7 +8,7 @@ export const latest = writable({}); // target -> path -> { v, t, changed }
 export const series = writable({}); // target -> { cols: [path], t: [], v: { path: [] } }
 export const events = writable([]); // { t, target, kind, text }
 export const replayName = writable(null);
-export const chat = writable({ items: [], busy: false, model: null, cost: 0, sessionId: null, chatId: null });
+export const chat = writable({ items: [], busy: false, model: null, cost: 0, sessionId: null, chatId: null, repo: null, engine: 'idle', engineDetail: '' });
 export const showTools = writable((() => { try { return localStorage.getItem('rdt.showTools') !== '0'; } catch { return true; } })());
 showTools.subscribe((v) => { try { localStorage.setItem('rdt.showTools', v ? '1' : '0'); } catch { /* not persisted */ } });
 export const claudeCharts = writable([]); // { id, title, series: [{target,path,as}], from, to }
@@ -42,6 +42,9 @@ function chatEvent(m) {
       }
       case 'result': c.cost += m.cost_usd ?? 0; break;
       case 'error': items.push({ k: 'error', text: m.text }); break;
+      case 'engine': c.repo = m.repo; c.engine = m.state; c.engineDetail = m.detail ?? ''; break;
+      case 'approval': items.push({ k: 'approval', id: m.id, action: m.action, path: m.path, diff: m.diff, state: 'pending' }); break;
+      case 'approval_done': { const a = items.find((x) => x.k === 'approval' && x.id === m.id); if (a) a.state = m.allow ? 'approved' : 'denied'; break; }
       case 'idle': c.busy = false; items.forEach((x) => (x.streaming = false)); break;
     }
     return c;
@@ -55,8 +58,8 @@ function uiCommand(m) {
 }
 
 // attachments: [{ name, data (base64) }] from ui/src/attach.js
-export async function sendChat(text, view, attachments = []) {
-  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, view, attachments: attachments.map(({ name, data }) => ({ name, data })) }) });
+export async function sendChat(text, view, attachments = [], repo = null) {
+  const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, view, repo, attachments: attachments.map(({ name, data }) => ({ name, data })) }) });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? r.statusText);
 }
 
@@ -73,17 +76,18 @@ export const deleteChat = (id) => jreq('DELETE', '/api/chats/' + id);
 // Opens a saved chat: the daemon makes it the current conversation (the next message resumes it) and the UI replays its events.
 export async function openChat(id) {
   const j = await jreq('POST', '/api/chats/' + id + '/open');
-  chat.set({ items: [], busy: false, model: null, cost: 0, sessionId: j.meta.session_id, chatId: id });
+  chat.set({ items: [], busy: false, model: null, cost: 0, sessionId: j.meta.session_id, chatId: id, repo: j.meta.repo ?? null, engine: 'idle', engineDetail: '' });
   claudeCharts.set([]);
   highlights.set([]);
   for (const ev of j.events) chatEvent(ev);
-  chat.update((c) => { c.busy = false; c.cost = j.meta.cost_usd ?? 0; c.items.forEach((x) => (x.streaming = false)); return c; });
+  chat.update((c) => { c.busy = false; c.cost = j.meta.cost_usd ?? 0; c.items.forEach((x) => { x.streaming = false; if (x.k === 'approval' && x.state === 'pending') x.state = 'expired'; }); c.engine = 'idle'; c.engineDetail = ''; return c; });
   return j.meta;
 }
+export const approve = (id, allow) => jreq('POST', '/api/chat/approve', { id, allow });
 export const stopChat = () => fetch('/api/chat/stop', { method: 'POST' });
 export async function resetChat() {
   await fetch('/api/chat/reset', { method: 'POST' });
-  chat.set({ items: [], busy: false, model: null, cost: 0, sessionId: null, chatId: null });
+  chat.set({ items: [], busy: false, model: null, cost: 0, sessionId: null, chatId: null, repo: null, engine: 'idle', engineDetail: '' });
   claudeCharts.set([]);
   highlights.set([]);
 }
@@ -151,6 +155,7 @@ function onMessage(ev) {
   else if (m.type === 'expr') exprLatest.update((L) => ({ ...L, [m.target]: { t: m.t, values: m.values } }));
   else if (m.type === 'chat') chatEvent(m);
   else if (m.type === 'ui') uiCommand(m);
+  else if (m.type === 'files_changed') window.dispatchEvent(new Event('rdt-files-changed'));
   else if (m.type === 'error') pushEvent({ t: m.t, target: m.target, kind: 'error', text: m.text });
 }
 

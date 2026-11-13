@@ -1,6 +1,6 @@
 <script>
   import { afterUpdate, onMount } from 'svelte';
-  import { chat, conn, sendChat, stopChat, resetChat, series, showTools } from './store.js';
+  import { chat, conn, sendChat, stopChat, resetChat, series, showTools, approve } from './store.js';
   import { RATES } from './panels.js';
   import { t, lang, localizeError } from './i18n.js';
   import { prepareFile, MAX_FILES } from './attach.js';
@@ -26,6 +26,14 @@
   let drag = false;
   let showHistory = false;
   let fileInput;
+  let repos = [];       // repos registered in Settings (code engine)
+  let repoPick = '';    // repo for a NEW conversation ('' = analysis only)
+  async function loadRepos() { try { repos = (await (await fetch('/api/settings')).json()).settings.repos ?? []; } catch { repos = []; } }
+  onMount(() => { loadRepos(); window.addEventListener('rdt-files-changed', loadRepos); return () => window.removeEventListener('rdt-files-changed', loadRepos); });
+  $: started = $chat.items.length > 0 || !!$chat.chatId;
+  $: engineOn = !!$chat.repo;
+  $: active = engineOn && !['idle', 'error'].includes($chat.engine);
+  const decide = async (id, allow) => { try { await approve(id, allow); } catch (e) { err = String(e.message ?? e); } };
 
   afterUpdate(() => { if (box) box.scrollTop = box.scrollHeight; });
 
@@ -62,7 +70,7 @@
     err = '';
     const files = pending;
     try {
-      await sendChat(q, view(), files);
+      await sendChat(q, view(), files, started ? null : repoPick || null);
       text = '';
       files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
       pending = [];
@@ -85,6 +93,20 @@
     <button on:click={resetChat} title={$t('chat.newTip')}>{$t('chat.new')}</button>
   </div>
   {#if showHistory}<ChatHistory on:opened={() => (showHistory = false)} />{/if}
+  {#if engineOn}
+    <div class="engine {$chat.engine}" class:active role="status" aria-live="polite">
+      <span class="dot" class:pulse={active}></span>
+      <b>{$t('code.engine')}</b> · <span class="mono">{$chat.repo}</span> · {$t('code.state.' + $chat.engine)}
+      {#if $chat.engineDetail && active}<span class="muted mono det" title={$chat.engineDetail}>{$chat.engineDetail}</span>{/if}
+    </div>
+  {:else if repos.length && !started}
+    <label class="repopick small muted">{$t('code.repoPick')}
+      <select bind:value={repoPick}>
+        <option value="">{$t('code.analysisOnly')}</option>
+        {#each repos as r}<option value={r.name}>{r.name}{r.board ? ' · ' + r.board : ''}</option>{/each}
+      </select>
+    </label>
+  {/if}
   <div class="msgs" bind:this={box}>
     {#each visible as m}
       {#if m.k === 'user'}
@@ -111,6 +133,14 @@
           <span class="muted mono">{short(m.input)}</span>
           {#if open[m.id] && m.result}<pre>{m.result}</pre>{/if}
         </button>
+      {:else if m.k === 'approval'}
+        <div class="m appr {m.state}">
+          <div><b>{$t('code.act.' + m.action)}</b> <span class="mono">{m.path}</span></div>
+          <pre>{m.diff}</pre>
+          {#if m.state === 'pending'}
+            <div class="row"><button class="primary" on:click={() => decide(m.id, true)}>{$t('code.approve')}</button> <button class="danger" on:click={() => decide(m.id, false)}>{$t('code.deny')}</button></div>
+          {:else}<div class="muted small">{$t('code.' + m.state)}</div>{/if}
+        </div>
       {:else if m.k === 'error'}
         <div class="m err">{m.text}</div>
       {/if}
@@ -170,4 +200,22 @@
   .pill { font-size: 11px; border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; color: var(--muted); }
   .pill.ready { color: var(--ok); border-color: var(--ok); }
   .pill.login, .pill.nosdk { color: var(--bad); border-color: var(--bad); }
+  .engine { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; padding: 4px 8px; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  .engine.waiting { border-color: var(--warn, #d9a400); }
+  .engine.error { border-color: var(--bad); color: var(--bad); }
+  .engine .det { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .engine.active .dot { background: var(--ok); }
+  .engine.waiting .dot { background: var(--warn, #d9a400); }
+  .engine.error .dot { background: var(--bad); }
+  .pulse { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+  .repopick { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+  .repopick select { flex: 1; min-width: 0; }
+  .appr { border: 1px solid var(--warn, #d9a400); background: var(--panel); width: 100%; box-sizing: border-box; }
+  .appr.approved { border-color: var(--ok); }
+  .appr.denied, .appr.expired { border-color: var(--line); opacity: .7; }
+  .appr pre { margin: 6px 0; max-height: 220px; overflow: auto; white-space: pre; font-size: 11px; }
+  .appr .row { display: flex; gap: 6px; }
 </style>

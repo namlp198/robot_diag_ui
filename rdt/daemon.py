@@ -68,6 +68,7 @@ class ChatRequest(BaseModel):
     text: str = Field("", max_length=4000)
     view: dict | None = None
     attachments: list[dict] = []   # [{name, data: base64}], validated by rdt.attachments
+    repo: str | None = None        # code engine: registered repo for a NEW conversation (decision 0011)
 
 
 class RecordRequest(BaseModel):
@@ -377,6 +378,10 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             return JSONResponse({"detail": "local access only"}, status_code=403)
         return await call_next(request)
 
+    def _settings_changed():
+        hub.apply_settings()
+        hub._publish({"type": "files_changed"})
+
     def get_chat():
         if hub.chat is None:
             try:
@@ -385,7 +390,7 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             except ImportError as e:
                 raise HTTPException(501, f"chat needs claude-agent-sdk: pip install -e .[chat] ({e})")
             hub.box = ToolBox(hub, ui=lambda m: hub._publish({"type": "ui", **m}))
-            hub.chat = ChatSession(hub.box, emit=hub._publish, settings=hub.settings, store=hub.chats)
+            hub.chat = ChatSession(hub.box, emit=hub._publish, settings=hub.settings, store=hub.chats, on_settings=_settings_changed)
         return hub.chat
 
     auth_cache: dict = {"t": 0.0, "v": None}
@@ -424,6 +429,8 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             await c.open_chat(chat_id)
         except RuntimeError as e:
             raise HTTPException(409, str(e))
+        except ValueError as e:  # the repo of this chat was removed from Settings
+            raise HTTPException(400, str(e))
         return {"meta": meta, "events": hub.chats.events(chat_id)}
 
     @app.patch("/api/chats/{chat_id}")
@@ -510,6 +517,12 @@ def create_app(hub: Hub | None = None) -> FastAPI:
                 i = firmware_mod.inspect(e.get("path", ""))
                 if i.get("error") or i.get("kind") is None:
                     raise HTTPException(400, f"{e.get('path')}: {i.get('error') or 'not a firmware file'}")
+        for r in changes.get("repos") or []:
+            if isinstance(r, dict) and r not in cur.repos:
+                if not Path(str(r.get("path", ""))).is_dir():
+                    raise HTTPException(400, f"repo {r.get('name')}: {r.get('path')} is not a folder")
+                if r.get("board") and r["board"] not in hub.targets:
+                    raise HTTPException(400, f"repo {r.get('name')}: unknown board {r['board']!r}")
         cp = changes.get("cube_cli_path")
         if cp and envcheck_mod.cube_version(Path(cp)) is None:
             raise HTTPException(400, f"{cp}: not a working STM32_Programmer_CLI")
@@ -628,12 +641,20 @@ def create_app(hub: Hub | None = None) -> FastAPI:
             raise HTTPException(422, "write a message or attach a file")
         c = get_chat()
         try:
-            c.start_turn(req.text, req.view, req.attachments)
-        except attach_mod.AttachmentError as e:
+            c.start_turn(req.text, req.view, req.attachments, req.repo)
+        except (attach_mod.AttachmentError, ValueError) as e:
             raise HTTPException(400, str(e))
         except RuntimeError as e:
             raise HTTPException(409, str(e))
         return {"ok": True, "chat_id": c.chat_id}
+
+    @app.post("/api/chat/approve")
+    async def chat_approve(body: dict):
+        """Approve or deny a change the code engine is waiting on."""
+        eng = hub.chat.engine if hub.chat is not None else None
+        if eng is None or not eng.answer(str(body.get("id", "")), body.get("allow") is True):
+            raise HTTPException(404, "nothing is waiting for that approval")
+        return {"ok": True}
 
     @app.post("/api/chat/stop")
     async def chat_stop():
