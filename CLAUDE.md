@@ -32,3 +32,7 @@ You are Claude Code working as a senior coding assistant inside this repository.
 - Code reviews: `outputs/code_reviews/`
 - Debug reports: `outputs/debug_reports/`
 - Temporary files: `outputs/temporary/`
+
+## Git workflow
+
+**Bắt buộc:** xem mục "Git workflow" trong AGENTS.md và chuẩn tại 06_Repositories/_standards/GIT-WORKFLOW.md (chỉ làm trên develop/feature/fix/hotfix, không động vào main/release/*).
