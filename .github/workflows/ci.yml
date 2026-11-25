@@ -21,9 +21,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -e ".[dev,daemon,chat,probe]"   # the app extra (pywebview) needs a GUI
-      # Windows-path assumption in one daemon test; it still runs in scripts/check.ps1 locally.
-      - run: python -m pytest -q --deselect tests/test_daemon.py::test_flash_rejects_unknown_target_and_foreign_paths
+      - run: python -m pip install -e ".[dev,daemon,chat]"   # probe (pyocd) and app (pywebview) need hardware or a GUI
+      # Two daemon tests need pyocd or Windows paths; they still run in scripts/check.ps1 locally.
+      - run: python -m pytest -q --deselect tests/test_daemon.py::test_flash_rejects_unknown_target_and_foreign_paths --deselect tests/test_daemon.py::test_settings_firmware_and_elf_files_are_checked_and_applied
       - run: python -m rdt.cli --help
   ui:
     runs-on: ubuntu-latest
