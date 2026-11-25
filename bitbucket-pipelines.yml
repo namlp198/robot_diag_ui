@@ -1,0 +1,24 @@
+# robot_diag_ui CI. Runs on the SELF-HOSTED WINDOWS RUNNER (labels self.hosted, windows); see _standards/CI-CD.md.
+# Check only: this tool is not released through fwhub (_standards/RELEASE-BUILDS.md). Tests that need a probe or an ELF skip.
+options:
+  max-time: 30
+
+definitions:
+  steps:
+    - step: &check
+        name: Check (pytest, CLI smoke)
+        runs-on: [self.hosted, windows]
+        script:
+          - powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check.ps1
+
+pipelines:
+  pull-requests:
+    '**':
+      - step: *check
+  branches:
+    develop:
+      - step: *check
+    main:
+      - step: *check
+    'release/*':
+      - step: *check
