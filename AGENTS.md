@@ -32,3 +32,4 @@ You are Codex working as a senior coding agent inside this repository.
 - Nhánh AI tạo phải đặt tên `feature/*`, không dùng `claude/*`, `codex/*`.
 - Đầu phiên: chạy `pwsh/powershell ..\_standards\scripts\Get-RepoSyncStatus.ps1 -Repo <tên repo>`; nếu `develop` có commit từ ngày trước chưa vào `main`, nhắc người dùng.
 - Cuối phiên (hoặc khi task xong): nếu `develop` đi trước `main` và đủ điều kiện (tree sạch, đã push, CI xanh, không xung đột) thì **hỏi** người dùng có merge `develop → main` (qua PR) không. Không tự merge khi chưa được đồng ý trong phiên đó.
+- Build (chuẩn tại `06_Repositories/_standards/RELEASE-BUILDS.md`): build trên PC là **LOCAL** (gói ra ở `outputs/temporary/dist/`, tên file có tên branch, không upload/publish/deploy). Gói phát hành chỉ do CI tạo từ `release/*`. Không đặt biến môi trường của CI trên PC để giả bản CI.
